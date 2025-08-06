@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTS Tariff Code Lookup Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+            color: #2c3e50;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px 30px;
+            border-bottom: 3px solid #3498db;
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .header .subtitle {
+            font-size: 1em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .header .effective-date {
+            font-size: 0.9em;
+            background: rgba(52, 152, 219, 0.2);
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .search-section {
+            padding: 20px 30px;
+            background: #ecf0f1;
+            border-bottom: 1px solid #bdc3c7;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            max-width: 600px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 1em;
+            background: white;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .search-btn {
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .search-btn:hover {
+            background: #2980b9;
+        }
+
+        .info-banner {
+            background: #e8f4fd;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 30px;
+            font-size: 0.9em;
+            color: #2c3e50;
+        }
+
+        .results-section {
+            padding: 0;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        .table-header {
+            background: #34495e;
+            color: white;
+        }
+
+        .table-header th {
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+            border-right: 1px solid #2c3e50;
+        }
+
+        .table-header th:last-child {
+            border-right: none;
+        }
+
+        .table-row {
+            border-bottom: 1px solid #ecf0f1;
+            transition: background-color 0.2s ease;
+        }
+
+        .table-row:hover {
+            background: #f8f9fa;
+        }
+
+        .table-row:nth-child(even) {
+            background: #fafbfc;
+        }
+
+        .table-row:nth-child(even):hover {
+            background: #f1f3f4;
+        }
+
+        .table-cell {
+            padding: 12px;
+            border-right: 1px solid #ecf0f1;
+            vertical-align: top;
+            font-size: 0.9em;
+        }
+
+        .table-cell:last-child {
+            border-right: none;
+        }
+
+        .country-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .hts-code {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #8e44ad;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .additional-duty {
+            font-weight: 700;
+            color: #e74c3c;
+            font-size: 1em;
+        }
+
+        .rate-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #34495e;
+        }
+
+        .notes-cell {
+            max-width: 200px;
+            font-size: 0.85em;
+            color: #7f8c8d;
+        }
+
+        .special-note {
+            background: #fff3cd;
+            color: #856404;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            display: inline-block;
+            margin-top: 2px;
+        }
+
+        .high-rate {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .eu-special {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .no-results, .initial-message {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 1px 2px;
+            border-radius: 2px;
+        }
+
+        .show-all-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+
+        .show-all-btn:hover {
+            background: #229954;
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .table-header th,
+            .table-cell {
+                padding: 8px 6px;
+                font-size: 0.8em;
+            }
+            
+            .notes-cell {
+                max-width: 150px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .search-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .results-table {
+                font-size: 0.7em;
+            }
+            
+            .table-header th,
+            .table-cell {
+                padding: 6px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏛️ HTS Tariff Code Lookup Tool</h1>
+            <div class="subtitle">U.S. Customs and Border Protection - Harmonized Tariff Schedule</div>
+            <div class="effective-date">Executive Order Effective: August 7, 2025</div>
+        </div>
+
+        <div class="search-section">
+            <div class="search-container">
+                <input type="text" id="countrySearch" class="search-input" 
+                       placeholder="Enter country or region name..." 
+                       autocomplete="off">
+                <button class="search-btn" id="searchBtn">Search</button>
+                <button class="show-all-btn" id="showAllBtn">Show All</button>
+            </div>
+        </div>
+
+        <div class="info-banner">
+            <strong>📋 Coverage:</strong> This tool covers HTS codes 9903.02.01 through 9903.02.71. 
+            Applies to goods entered for consumption on or after 12:01 AM EDT, August 7, 2025.
+        </div>
+
+        <div class="results-section">
+            <table class="results-table" id="resultsTable">
+                <thead class="table-header">
+                    <tr>
+                        <th>Country/Region</th>
+                        <th>HTS Code</th>
+                        <th>Additional Duty</th>
+                        <th>General Rate</th>
+                        <th>Special Rate</th>
+                        <th>Column 2 Rate</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                </tbody>
+            </table>
+            
+            <div id="initialMessage" class="initial-message">
+                <h3>🔍 Search for a country or region above</h3>
+                <p>Or click "Show All" to see the complete tariff schedule</p>
+            </div>
+            
+            <div id="noResults" class="no-results" style="display: none;">
+                <h3>🔍 No results found</h3>
+                <p>Try searching for a different country name or check the spelling.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tariff data with all countries and rates
+        const tariffData = [
+            { 
+                country: 'Transshipment Evasion', 
+                code: '9903.02.01', 
+                rate: '+40%', 
+                notes: 'Anti-Evasion',
+                description: 'Articles determined by CBP to have been transshipped to evade applicable duties'
+            },
+            { country: 'Afghanistan', code: '9903.02.02', rate: '+15%', notes: '' },
+            
+            // EU Member Countries - Individual entries for searchability
+            { 
+                country: 'Austria', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Belgium', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Bulgaria', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Croatia', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Cyprus', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Czech Republic', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Denmark', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Estonia', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Finland', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'France', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Germany', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Greece', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Hungary', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Ireland', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Italy', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Latvia', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Lithuania', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Luxembourg', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Malta', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Netherlands', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Poland', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Portugal', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Romania', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Slovakia', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Slovenia', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Spain', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            { 
+                country: 'Sweden', 
+                code: '9903.02.19/20', 
+                rate: 'EU Rules Apply', 
+                notes: 'EU Member',
+                generalRate: 'See EU rules below',
+                specialRate: 'See EU rules below',
+                column2Rate: 'Base duty only',
+                description: 'EU member - rate depends on existing duty level'
+            },
+            
+            { country: 'Algeria', code: '9903.02.03', rate: '+30%', notes: '' },
+            { country: 'Angola', code: '9903.02.04', rate: '+15%', notes: '' },
+            { country: 'Bangladesh', code: '9903.02.05', rate: '+20%', notes: '' },
+            { country: 'Bolivia', code: '9903.02.06', rate: '+15%', notes: '' },
+            { country: 'Bosnia and Herzegovina', code: '9903.02.07', rate: '+30%', notes: '' },
+            { country: 'Botswana', code: '9903.02.08', rate: '+15%', notes: '' },
+            { country: 'Brazil', code: '9903.02.09', rate: '+10%', notes: '' },
+            { country: 'Brunei', code: '9903.02.10', rate: '+25%', notes: '' },
+            { country: 'Cambodia', code: '9903.02.11', rate: '+19%', notes: '' },
+            { country: 'Cameroon', code: '9903.02.12', rate: '+15%', notes: '' },
+            { country: 'Chad', code: '9903.02.13', rate: '+15%', notes: '' },
+            { country: 'Costa Rica', code: '9903.02.14', rate: '+15%', notes: '' },
+            { country: 'Côte d\'Ivoire', code: '9903.02.15', rate: '+15%', notes: '' },
+            { country: 'Democratic Republic of the Congo', code: '9903.02.16', rate: '+15%', notes: '' },
+            { country: 'Ecuador', code: '9903.02.17', rate: '+15%', notes: '' },
+            { country: 'Equatorial Guinea', code: '9903.02.18', rate: '+15%', notes: '' },
+            { 
+                country: 'European Union (≥15% duty)', 
+                code: '9903.02.19', 
+                rate: 'No additional', 
+                notes: 'EU Special Rule',
+                generalRate: 'Base duty only',
+                specialRate: 'Base duty only',
+                column2Rate: 'Base duty only'
+            },
+            { 
+                country: 'European Union (<15% duty)', 
+                code: '9903.02.20', 
+                rate: '15% flat', 
+                notes: 'EU Special Rule',
+                generalRate: '15%',
+                specialRate: '15%',
+                column2Rate: 'Base duty only'
+            },
+            { country: 'Falkland Islands', code: '9903.02.21', rate: '+10%', notes: '' },
+            { country: 'Fiji', code: '9903.02.22', rate: '+15%', notes: '' },
+            { country: 'Ghana', code: '9903.02.23', rate: '+15%', notes: '' },
+            { country: 'Guyana', code: '9903.02.24', rate: '+15%', notes: '' },
+            { country: 'Iceland', code: '9903.02.25', rate: '+15%', notes: '' },
+            { country: 'India', code: '9903.02.26', rate: '+25%', notes: '' },
+            { country: 'Indonesia', code: '9903.02.27', rate: '+19%', notes: '' },
+            { country: 'Iraq', code: '9903.02.28', rate: '+35%', notes: '' },
+            { country: 'Israel', code: '9903.02.29', rate: '+15%', notes: '' },
+            { country: 'Japan', code: '9903.02.30', rate: '+15%', notes: '' },
+            { country: 'Jordan', code: '9903.02.31', rate: '+15%', notes: '' },
+            { country: 'Kazakhstan', code: '9903.02.32', rate: '+25%', notes: '' },
+            { country: 'Laos', code: '9903.02.33', rate: '+40%', notes: 'Highest Rate' },
+            { country: 'Lesotho', code: '9903.02.34', rate: '+15%', notes: '' },
+            { country: 'Libya', code: '9903.02.35', rate: '+30%', notes: '' },
+            { country: 'Liechtenstein', code: '9903.02.36', rate: '+15%', notes: '' },
+            { country: 'Madagascar', code: '9903.02.37', rate: '+15%', notes: '' },
+            { country: 'Malawi', code: '9903.02.38', rate: '+15%', notes: '' },
+            { country: 'Malaysia', code: '9903.02.39', rate: '+19%', notes: '' },
+            { country: 'Mauritius', code: '9903.02.40', rate: '+15%', notes: '' },
+            { country: 'Moldova', code: '9903.02.41', rate: '+25%', notes: '' },
+            { country: 'Mozambique', code: '9903.02.42', rate: '+15%', notes: '' },
+            { country: 'Myanmar (Burma)', code: '9903.02.43', rate: '+40%', notes: 'Highest Rate' },
+            { country: 'Namibia', code: '9903.02.44', rate: '+15%', notes: '' },
+            { country: 'Nauru', code: '9903.02.45', rate: '+15%', notes: '' },
+            { country: 'New Zealand', code: '9903.02.46', rate: '+15%', notes: '' },
+            { country: 'Nicaragua', code: '9903.02.47', rate: '+18%', notes: '' },
+            { country: 'Nigeria', code: '9903.02.48', rate: '+15%', notes: '' },
+            { country: 'North Macedonia', code: '9903.02.49', rate: '+15%', notes: '' },
+            { country: 'Norway', code: '9903.02.50', rate: '+15%', notes: '' },
+            { country: 'Pakistan', code: '9903.02.51', rate: '+19%', notes: '' },
+            { country: 'Papua New Guinea', code: '9903.02.52', rate: '+15%', notes: '' },
+            { country: 'Philippines', code: '9903.02.53', rate: '+19%', notes: '' },
+            { country: 'Serbia', code: '9903.02.54', rate: '+35%', notes: '' },
+            { country: 'South Africa', code: '9903.02.55', rate: '+30%', notes: '' },
+            { country: 'South Korea', code: '9903.02.56', rate: '+15%', notes: '' },
+            { country: 'Sri Lanka', code: '9903.02.57', rate: '+20%', notes: '' },
+            { country: 'Switzerland', code: '9903.02.58', rate: '+39%', notes: '' },
+            { country: 'Syria', code: '9903.02.59', rate: '+41%', notes: 'Highest Rate' },
+            { country: 'Taiwan', code: '9903.02.60', rate: '+20%', notes: '' },
+            { country: 'Thailand', code: '9903.02.61', rate: '+19%', notes: '' },
+            { country: 'Trinidad and Tobago', code: '9903.02.62', rate: '+15%', notes: '' },
+            { country: 'Tunisia', code: '9903.02.63', rate: '+25%', notes: '' },
+            { country: 'Turkey', code: '9903.02.64', rate: '+15%', notes: '' },
+            { country: 'Uganda', code: '9903.02.65', rate: '+15%', notes: '' },
+            { country: 'United Kingdom', code: '9903.02.66', rate: '+10%', notes: '' },
+            { country: 'Vanuatu', code: '9903.02.67', rate: '+15%', notes: '' },
+            { country: 'Venezuela', code: '9903.02.68', rate: '+15%', notes: '' },
+            { country: 'Vietnam', code: '9903.02.69', rate: '+20%', notes: '' },
+            { country: 'Zambia', code: '9903.02.70', rate: '+15%', notes: '' },
+            { country: 'Zimbabwe', code: '9903.02.71', rate: '+15%', notes: '' }
+        ];
+
+        // Country aliases for better search
+        const countryAliases = {
+            'UK': 'United Kingdom',
+            'Britain': 'United Kingdom',
+            'Great Britain': 'United Kingdom',
+            'England': 'United Kingdom',
+            'Korea': 'South Korea',
+            'Republic of Korea': 'South Korea',
+            'DRC': 'Democratic Republic of the Congo',
+            'Congo': 'Democratic Republic of the Congo',
+            'Burma': 'Myanmar (Burma)',
+            'EU': 'European Union (≥15% duty)',
+            'Europe': 'European Union (≥15% duty)',
+            'Macedonia': 'North Macedonia',
+            'Ivory Coast': 'Côte d\'Ivoire',
+            'Cote d\'Ivoire': 'Côte d\'Ivoire',
+            'Anti-Evasion': 'Transshipment Evasion',
+            'Evasion': 'Transshipment Evasion',
+            // Additional EU country aliases
+            'Holland': 'Netherlands',
+            'Czech': 'Czech Republic',
+            'Czechia': 'Czech Republic'
+        };
+
+        // Get DOM elements
+        const searchInput = document.getElementById('countrySearch');
+        const searchBtn = document.getElementById('searchBtn');
+        const showAllBtn = document.getElementById('showAllBtn');
+        const resultsTable = document.getElementById('resultsTable');
+        const resultsBody = document.getElementById('resultsBody');
+        const initialMessage = document.getElementById('initialMessage');
+        const noResults = document.getElementById('noResults');
+
+        function highlightMatch(text, query) {
+            if (!query) return text;
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        function searchCountries(query) {
+            if (!query || !query.trim()) {
+                return [];
+            }
+
+            const normalizedQuery = query.toLowerCase().trim();
+            const matches = [];
+
+            // Search in main country names
+            tariffData.forEach(item => {
+                if (item.country.toLowerCase().includes(normalizedQuery)) {
+                    matches.push({
+                        ...item,
+                        matchType: 'direct'
+                    });
+                }
+            });
+
+            // Search in aliases
+            Object.keys(countryAliases).forEach(alias => {
+                if (alias.toLowerCase().includes(normalizedQuery)) {
+                    const actualCountry = countryAliases[alias];
+                    const countryData = tariffData.find(item => item.country === actualCountry);
+                    if (countryData && !matches.some(m => m.country === actualCountry)) {
+                        matches.push({
+                            ...countryData,
+                            matchType: 'alias',
+                            alias: alias
+                        });
+                    }
+                }
+            });
+
+            return matches;
+        }
+
+        function createTableRow(item, query = '') {
+            const isEU = item.country.includes('European Union') || item.notes === 'EU Member';
+            const isHighRate = item.rate.includes('40%') || item.rate.includes('41%') || item.rate.includes('39%');
+            const isAntiEvasion = item.country === 'Transshipment Evasion';
+            
+            const generalRate = item.generalRate || (item.rate.startsWith('+') ? `Base duty ${item.rate}` : item.rate);
+            const specialRate = item.specialRate || (item.rate.startsWith('+') ? `Base duty ${item.rate}` : item.rate);
+            const column2Rate = item.column2Rate || 'Base duty only';
+            
+            let noteClass = '';
+            let noteText = item.notes;
+            
+            if (isAntiEvasion) noteClass = 'high-rate';
+            else if (isEU) noteClass = 'eu-special';
+            else if (isHighRate) noteClass = 'high-rate';
+            
+            if (item.matchType === 'alias') {
+                noteText = noteText ? `${noteText}, Also: ${item.alias}` : `Also: ${item.alias}`;
+            }
+
+            // Special handling for EU member countries
+            let additionalInfo = '';
+            if (item.notes === 'EU Member') {
+                additionalInfo = `
+                    <div style="font-size: 0.75em; color: #0c5460; margin-top: 4px; padding: 4px; background: #d1ecf1; border-radius: 3px;">
+                        <strong>EU Rules:</strong><br>
+                        • If existing duty ≥15%: Use code 9903.02.19 (no additional duty)<br>
+                        • If existing duty &lt;15%: Use code 9903.02.20 (15% flat rate)
+                    </div>
+                `;
+            }
+
+            return `
+                <tr class="table-row">
+                    <td class="table-cell">
+                        <div class="country-name">${highlightMatch(item.country, query)}</div>
+                        ${item.description ? `<div style="font-size: 0.8em; color: #7f8c8d; margin-top: 2px;">${item.description}</div>` : ''}
+                        ${additionalInfo}
+                    </td>
+                    <td class="table-cell">
+                        <span class="hts-code">${item.code}</span>
+                    </td>
+                    <td class="table-cell">
+                        <span class="additional-duty">${item.rate}</span>
+                    </td>
+                    <td class="table-cell">
+                        <span class="rate-cell">${generalRate}</span>
+                    </td>
+                    <td class="table-cell">
+                        <span class="rate-cell">${specialRate}</span>
+                    </td>
+                    <td class="table-cell">
+                        <span class="rate-cell">${column2Rate}</span>
+                    </td>
+                    <td class="table-cell notes-cell">
+                        ${noteText ? `<span class="special-note ${noteClass}">${noteText}</span>` : ''}
+                    </td>
+                </tr>
+            `;
+        }
+
+        function displayResults(items, query = '') {
+            // Hide initial message
+            initialMessage.style.display = 'none';
+            
+            if (items.length === 0) {
+                resultsTable.style.display = 'none';
+                noResults.style.display = 'block';
+                return;
+            }
+
+            noResults.style.display = 'none';
+            resultsTable.style.display = 'table';
+
+            const rowsHtml = items.map(item => createTableRow(item, query)).join('');
+            resultsBody.innerHTML = rowsHtml;
+        }
+
+        function performSearch() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                showInitialState();
+                return;
+            }
+            
+            const matches = searchCountries(query);
+            displayResults(matches, query);
+        }
+
+        function showAll() {
+            searchInput.value = '';
+            displayResults(tariffData);
+        }
+
+        function showInitialState() {
+            resultsTable.style.display = 'none';
+            noResults.style.display = 'none';
+            initialMessage.style.display = 'block';
+        }
+
+        // Event listeners
+        searchInput.addEventListener('input', performSearch);
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                performSearch();
+            }
+        });
+
+        searchBtn.addEventListener('click', performSearch);
+        showAllBtn.addEventListener('click', showAll);
+
+        // Initialize
+        showInitialState();
+        searchInput.focus();
+    </script>
+</body>
+</html>

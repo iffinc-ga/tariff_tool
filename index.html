@@ -69,7 +69,7 @@
                 color: 'blue',
                 dbFileName: 'updated_vieler_db.xlsx',
                 description: 'Vieler customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2'],
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM'
             },
@@ -211,13 +211,18 @@
                     return { found: false, reason: `Part number ${partNumber} not found in ${currentCustomer.name} database` };
                 }
 
+                // Debug: collect all tariffs found
+                const foundTariffs = [];
                 let tariffNumber = null;
                 
                 for (const col of config.tariffColumns) {
                     const tariff = String(part[col] || '').trim();
-                    if (tariff && config.tariffFilter(tariff)) {
-                        tariffNumber = tariff;
-                        break;
+                    if (tariff) {
+                        foundTariffs.push({ column: col, value: tariff, passes: config.tariffFilter(tariff) });
+                        if (config.tariffFilter(tariff)) {
+                            tariffNumber = tariff;
+                            break;
+                        }
                     }
                 }
 
@@ -225,7 +230,10 @@
                     const filterDesc = selectedCustomer === 'manki' 
                         ? 'starting with 3' 
                         : 'not starting with 9';
-                    return { found: false, reason: `No valid tariff number found (${filterDesc})` };
+                    const debugInfo = foundTariffs.length > 0 
+                        ? ` Found tariffs: ${foundTariffs.map(t => `${t.value} (${t.passes ? 'pass' : 'fail'})`).join(', ')}`
+                        : ' No tariffs found in any column';
+                    return { found: false, reason: `No valid tariff number found (need ${filterDesc}).${debugInfo}` };
                 }
 
                 const mapping = tariffMappings.find(row => {
@@ -773,4 +781,3 @@
     </script>
 </body>
 </html>
-

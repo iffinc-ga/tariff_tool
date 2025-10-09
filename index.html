@@ -504,45 +504,48 @@
             };
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-3">
                     <div className="max-w-7xl mx-auto">
-                        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                            <h1 className="text-3xl font-bold text-gray-800 mb-2">Multi-Customer Invoice Processing Tool</h1>
-                            <p className="text-gray-600 mb-6">Select your customer and process invoices with material-specific duplications</p>
-                            
-                            <div className="flex gap-2 mb-4 flex-wrap">
-                                {Object.entries(CUSTOMERS).map(([key, customer]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => setSelectedCustomer(key)}
-                                        className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                                            selectedCustomer === key
-                                                ? `bg-${customer.color}-600 text-white shadow-md`
-                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                        }`}
-                                    >
-                                        {customer.name}
-                                    </button>
-                                ))}
+                        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">Multi-Customer Invoice Tool</h1>
+                                    <p className="text-sm text-gray-600">Select customer and process invoices</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    {Object.entries(CUSTOMERS).map(([key, customer]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setSelectedCustomer(key)}
+                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                                                selectedCustomer === key
+                                                    ? `bg-${customer.color}-600 text-white shadow-md`
+                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            {customer.name}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
-                            <div className={`p-4 rounded-lg border ${getColorClasses('light')} ${getColorClasses('border')}`}>
-                                <p className="text-sm text-gray-700 mb-2">{currentCustomer.description}</p>
-                                <p className="text-xs text-gray-600">Database: {currentCustomer.dbFileName} {dbLoaded && '✓ Loaded'}</p>
+                            <div className={`p-2 rounded-lg border text-xs ${getColorClasses('light')} ${getColorClasses('border')}`}>
+                                <span className="text-gray-700">{currentCustomer.description}</span>
+                                <span className="text-gray-600 ml-3">• DB: {currentCustomer.dbFileName} {dbLoaded && '✓'}</span>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-lg p-6 mb-6 sticky top-0 z-50">
+                        <div className="bg-white rounded-xl shadow-lg p-3 mb-4 sticky top-0 z-50">
                             {message && (
-                                <div className={`mb-4 p-4 rounded-lg flex items-start gap-3 ${
+                                <div className={`mb-2 p-2 rounded-lg flex items-start gap-2 text-sm ${
                                     message.type === 'success' ? 'bg-green-50 border border-green-200' : 
                                     message.type === 'info' ? 'bg-blue-50 border border-blue-200' :
                                     'bg-red-50 border border-red-200'
                                 }`}>
                                     {message.type === 'success' ? (
-                                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                                        <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
                                     ) : (
-                                        <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                                        <AlertCircle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
                                             message.type === 'info' ? 'text-blue-600' : 'text-red-600'
                                         }`} />
                                     )}
@@ -555,56 +558,55 @@
                             )}
 
                             {isLoadingDb && (
-                                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                                        <p className="text-blue-800">Loading {currentCustomer.name} database from repository...</p>
+                                <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                                        <p className="text-blue-800 text-sm">Loading {currentCustomer.name} database...</p>
                                     </div>
                                 </div>
                             )}
 
                             {invoiceData.length > 0 && dbLoaded && (
-                                <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Optional: Override Values for Duplicated Row</h3>
-                                    <div className="grid grid-cols-3 gap-4">
+                                <div className="mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional Override Values:</h3>
+                                    <div className="grid grid-cols-3 gap-2">
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
+                                            <label className="block text-xs text-gray-600 mb-0.5">Quantity</label>
                                             <input
                                                 type="number"
                                                 value={quantity}
                                                 onChange={(e) => setQuantity(e.target.value)}
-                                                placeholder="Leave blank to use original"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                placeholder="Original"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Unit Price</label>
+                                            <label className="block text-xs text-gray-600 mb-0.5">Unit Price</label>
                                             <input
                                                 type="number"
                                                 step="0.01"
                                                 value={unitPrice}
                                                 onChange={(e) => setUnitPrice(e.target.value)}
-                                                placeholder="Leave blank to use original"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                placeholder="Original"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Item Total</label>
+                                            <label className="block text-xs text-gray-600 mb-0.5">Item Total</label>
                                             <input
                                                 type="number"
                                                 step="0.01"
                                                 value={itemTotal}
                                                 onChange={(e) => setItemTotal(e.target.value)}
-                                                placeholder="Auto-calculated or original"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                placeholder="Auto-calc"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                             />
-                                            <p className="text-xs text-gray-500 mt-1">Auto-calculated if Qty & Price provided</p>
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            <div className="flex gap-4 mb-6 flex-wrap">
+                            <div className="flex gap-2 mb-2 flex-wrap items-center">
                                 <input
                                     type="file"
                                     ref={fileInputRef}
@@ -615,58 +617,58 @@
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={!dbLoaded || isLoadingDb}
-                                    className={`flex items-center gap-2 px-6 py-3 ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
                                 >
-                                    <Upload className="w-5 h-5" />
-                                    Upload Invoice File
+                                    <Upload className="w-4 h-4" />
+                                    Upload Invoice
                                 </button>
                                 
                                 <button
                                     onClick={() => duplicateRow('aluminum')}
                                     disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded || isLoadingDb}
-                                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
-                                    <Copy className="w-5 h-5" />
-                                    Duplicate for Aluminum
+                                    <Copy className="w-4 h-4" />
+                                    Aluminum
                                 </button>
 
                                 <button
                                     onClick={() => duplicateRow('steel')}
                                     disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded || isLoadingDb}
-                                    className="flex items-center gap-2 px-6 py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
-                                    <Copy className="w-5 h-5" />
-                                    Duplicate for Steel
+                                    <Copy className="w-4 h-4" />
+                                    Steel
                                 </button>
 
                                 <button
                                     onClick={downloadFile}
                                     disabled={invoiceData.length === 0}
-                                    className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
-                                    <Download className="w-5 h-5" />
-                                    Download Updated File
+                                    <Download className="w-4 h-4" />
+                                    Download
                                 </button>
-                            </div>
 
-                            <div className="grid grid-cols-4 gap-4">
-                                <div className={`${getColorClasses('light')} rounded-lg p-4`}>
-                                    <p className="text-sm text-gray-600">Customer</p>
-                                    <p className={`text-2xl font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</p>
-                                </div>
-                                <div className="bg-emerald-50 rounded-lg p-4">
-                                    <p className="text-sm text-gray-600">Total Rows</p>
-                                    <p className="text-2xl font-bold text-emerald-600">{invoiceData.length > 0 ? invoiceData.length : '-'}</p>
-                                </div>
-                                <div className="bg-teal-50 rounded-lg p-4">
-                                    <p className="text-sm text-gray-600">Selected Row</p>
-                                    <p className="text-2xl font-bold text-teal-600">{selectedRow !== null ? selectedRow + 1 : '-'}</p>
-                                </div>
-                                <div className="bg-cyan-50 rounded-lg p-4">
-                                    <p className="text-sm text-gray-600">Database Status</p>
-                                    <p className="text-2xl font-bold text-cyan-600">
-                                        {isLoadingDb ? 'Loading...' : dbLoaded ? `${customerDbData.length} records` : 'Error'}
-                                    </p>
+                                <div className="flex gap-2 ml-auto text-xs">
+                                    <div className={`${getColorClasses('light')} rounded px-2 py-1`}>
+                                        <span className="text-gray-600">Customer: </span>
+                                        <span className={`font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</span>
+                                    </div>
+                                    <div className="bg-emerald-50 rounded px-2 py-1">
+                                        <span className="text-gray-600">Rows: </span>
+                                        <span className="font-bold text-emerald-600">{invoiceData.length > 0 ? invoiceData.length : '-'}</span>
+                                    </div>
+                                    <div className="bg-teal-50 rounded px-2 py-1">
+                                        <span className="text-gray-600">Selected: </span>
+                                        <span className="font-bold text-teal-600">{selectedRow !== null ? selectedRow + 1 : '-'}</span>
+                                    </div>
+                                    <div className="bg-cyan-50 rounded px-2 py-1">
+                                        <span className="text-gray-600">DB: </span>
+                                        <span className="font-bold text-cyan-600">
+                                            {isLoadingDb ? '...' : dbLoaded ? `${customerDbData.length}` : 'Error'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -766,9 +768,9 @@
                         )}
 
                         {invoiceData.length === 0 && dbLoaded && (
-                            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-                                <Upload className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                                <p className="text-gray-600 text-lg">Upload an invoice file to get started</p>
+                            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+                                <Upload className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                <p className="text-gray-600">Upload an invoice file to get started</p>
                             </div>
                         )}
                     </div>
@@ -781,4 +783,3 @@
     </script>
 </body>
 </html>
-

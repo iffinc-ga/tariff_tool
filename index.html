@@ -65,25 +65,37 @@
                 name: 'Grass',
                 color: 'green',
                 dbFileName: 'updated_grass_db.xlsx',
-                description: 'Grass customer processing with aluminum/steel duplication'
+                description: 'Grass customer processing with aluminum/steel duplication',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'), // Exclude tariffs starting with 9
+                partNumColumn: 'PRIMARY PART NUM'
             },
             vieler: {
                 name: 'Vieler',
                 color: 'blue',
                 dbFileName: 'vieler_db.xlsx',
-                description: 'Vieler customer processing'
+                description: 'Vieler customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'), // Customize as needed
+                partNumColumn: 'PRIMARY PART NUM'
             },
             cb: {
                 name: 'CB Manufacturing',
                 color: 'purple',
-                dbFileName: 'cb_db.xlsx',
-                description: 'CB Manufacturing customer processing'
+                dbFileName: 'updated_cbman_db.xlsx',
+                description: 'CB Manufacturing customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'), // Exclude tariffs starting with 9
+                partNumColumn: 'PRIMARY PART NUM'
             },
             manki: {
                 name: 'Manki',
                 color: 'orange',
-                dbFileName: 'manki_db.xlsx',
-                description: 'Manki customer processing'
+                dbFileName: 'UPDATED_MANKI_DB.xlsx',
+                description: 'Manki customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM2', 'TARIFF NUM51'],
+                tariffFilter: (tariff) => tariff.startsWith('3'), // Only tariffs starting with 3
+                partNumColumn: 'PRIMARY PART NUM'
             }
         };
 
@@ -139,8 +151,8 @@
                         const mainData = XLSX.utils.sheet_to_json(mainSheet, { defval: "" });
                         setCustomerDbData(mainData);
                         
-                        // Load Sheet1 for tariff mappings if it exists (for Grass)
-                        if (selectedCustomer === 'grass' && workbook.SheetNames.includes('Sheet1')) {
+                        // Load Sheet1 for tariff mappings if it exists
+                        if (workbook.SheetNames.includes('Sheet1')) {
                             const sheet1 = workbook.Sheets['Sheet1'];
                             const mappings = XLSX.utils.sheet_to_json(sheet1, { header: 1, defval: "" });
                             setTariffMappings(mappings.slice(1)); // Skip header row
@@ -184,53 +196,55 @@
             };
 
             const findTariffValue = (partNumber, materialType) => {
-                // Grass-specific logic
-                if (selectedCustomer === 'grass') {
-                    const normalizedPartNumber = String(partNumber || '').trim();
-                    
-                    const part = customerDbData.find(row => {
-                        const dbPartNum = String(row['PRIMARY PART NUM'] || '').trim();
-                        return dbPartNum === normalizedPartNumber;
-                    });
-                    
-                    if (!part) {
-                        return { found: false, reason: `Part number ${partNumber} not found in database` };
-                    }
-
-                    const tariffColumns = ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'];
-                    let tariffNumber = null;
-                    
-                    for (const col of tariffColumns) {
-                        const tariff = String(part[col] || '');
-                        if (tariff && !tariff.startsWith('9')) {
-                            tariffNumber = tariff;
-                            break;
-                        }
-                    }
-
-                    if (!tariffNumber) {
-                        return { found: false, reason: 'No valid tariff number found (all start with 9)' };
-                    }
-
-                    const mapping = tariffMappings.find(row => {
-                        const tariffCol = String(row[0] || '').trim();
-                        const normalizedTariff = String(tariffNumber).trim();
-                        return tariffCol === normalizedTariff;
-                    });
-
-                    const columnIndex = materialType === 'aluminum' ? 1 : 2;
-                    
-                    if (mapping && mapping[columnIndex]) {
-                        return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
-                    }
-
-                    const defaultValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
-                    return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
+                const normalizedPartNumber = String(partNumber || '').trim();
+                const config = currentCustomer;
+                
+                // Find the part in database
+                const part = customerDbData.find(row => {
+                    const dbPartNum = String(row[config.partNumColumn] || '').trim();
+                    return dbPartNum === normalizedPartNumber;
+                });
+                
+                if (!part) {
+                    return { found: false, reason: `Part number ${partNumber} not found in ${currentCustomer.name} database` };
                 }
 
-                // For other customers, implement their specific logic here
-                // This is a placeholder that can be customized per customer
-                return { found: true, value: `${currentCustomer.name}_${materialType.toUpperCase()}`, materialType };
+                // Look for valid tariff numbers based on customer's filter
+                let tariffNumber = null;
+                
+                for (const col of config.tariffColumns) {
+                    const tariff = String(part[col] || '').trim();
+                    if (tariff && config.tariffFilter(tariff)) {
+                        tariffNumber = tariff;
+                        break;
+                    }
+                }
+
+                if (!tariffNumber) {
+                    const filterDesc = selectedCustomer === 'manki' 
+                        ? 'starting with 3' 
+                        : 'not starting with 9';
+                    return { found: false, reason: `No valid tariff number found (${filterDesc})` };
+                }
+
+                // Check if tariff exists in Sheet1 mappings
+                const mapping = tariffMappings.find(row => {
+                    const tariffCol = String(row[0] || '').trim();
+                    const normalizedTariff = String(tariffNumber).trim();
+                    return tariffCol === normalizedTariff;
+                });
+
+                // Determine which column to use based on material type
+                // Column 1 = Aluminum, Column 2 = Steel
+                const columnIndex = materialType === 'aluminum' ? 1 : 2;
+                
+                if (mapping && mapping[columnIndex]) {
+                    return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
+                }
+
+                // Default based on material type if no mapping found
+                const defaultValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
+                return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
             };
 
             const duplicateRow = (materialType) => {
@@ -316,7 +330,7 @@
                 const materialLabel = materialType === 'aluminum' ? 'Aluminum' : 'Steel';
                 let messageText = tariffResult.usingDefault 
                     ? `Row duplicated for ${materialLabel} with default value. Tariff ${tariffResult.tariff} not found in mappings.`
-                    : `Row duplicated for ${materialLabel}! Applied: ${tariffResult.value}`;
+                    : `Row duplicated for ${materialLabel}! Applied: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
                 
                 if (hasCustomValues) {
                     messageText += ` Original row's ItemTotal reduced by ${newRowItemTotal.toFixed(2)}.`;
@@ -510,7 +524,8 @@
                             </div>
 
                             <div className={`p-4 rounded-lg border ${getColorClasses('light')} ${getColorClasses('border')}`}>
-                                <p className="text-sm text-gray-700">{currentCustomer.description}</p>
+                                <p className="text-sm text-gray-700 mb-2">{currentCustomer.description}</p>
+                                <p className="text-xs text-gray-600">Database file: {currentCustomer.dbFileName}</p>
                             </div>
                         </div>
 
@@ -546,7 +561,7 @@
                                         <h3 className="text-lg font-semibold text-gray-800">Step 1: Upload Database File</h3>
                                     </div>
                                     <p className="text-sm text-gray-600 mb-3">
-                                        Upload the {currentCustomer.name} database file ({currentCustomer.dbFileName})
+                                        Upload the {currentCustomer.name} database file: <span className="font-mono font-semibold">{currentCustomer.dbFileName}</span>
                                     </p>
                                     <input
                                         type="file"

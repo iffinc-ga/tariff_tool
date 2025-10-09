@@ -73,9 +73,9 @@
             vieler: {
                 name: 'Vieler',
                 color: 'blue',
-                dbFileName: 'vieler_db.xlsx',
+                dbFileName: 'updated_vieler_db.xlsx',
                 description: 'Vieler customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'), // Customize as needed
                 partNumColumn: 'PRIMARY PART NUM'
             },
@@ -93,7 +93,7 @@
                 color: 'orange',
                 dbFileName: 'UPDATED_MANKI_DB.xlsx',
                 description: 'Manki customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM2', 'TARIFF NUM51'],
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
                 tariffFilter: (tariff) => tariff.startsWith('3'), // Only tariffs starting with 3
                 partNumColumn: 'PRIMARY PART NUM'
             }
@@ -800,3 +800,4 @@
     </script>
 </body>
 </html>
+

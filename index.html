@@ -9,6 +9,17 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Remove spinner arrows from number inputs */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -303,15 +314,24 @@
                 let updatedOriginalRow = rowToDuplicate;
                 if (hasCustomValues) {
                     updatedOriginalRow = { ...rowToDuplicate };
-                    updatedOriginalRow.ItemTotal = (rowToDuplicate.ItemTotal || 0) - newRowItemTotal;
-                    newRow._subtractedItemTotal = newRowItemTotal;
                     
+                    // Only quantity provided and nothing else - reduce both quantity and recalculate ItemTotal
                     if (quantity !== '' && unitPrice === '' && itemTotal === '') {
                         const subtractedQuantity = parseFloat(quantity);
                         const remainingQty = (rowToDuplicate.Quantity || 0) - subtractedQuantity;
                         updatedOriginalRow.Quantity = remainingQty;
                         updatedOriginalRow.ItemTotal = remainingQty * (rowToDuplicate.UnitPrice || 0);
                         newRow._subtractedQuantity = subtractedQuantity;
+                    } else {
+                        // Any other case - quantity stays same, ItemTotal is reduced, unit price must be recalculated
+                        updatedOriginalRow.ItemTotal = (rowToDuplicate.ItemTotal || 0) - newRowItemTotal;
+                        newRow._subtractedItemTotal = newRowItemTotal;
+                        
+                        // Recalculate unit price for the original row
+                        const remainingQty = updatedOriginalRow.Quantity || 0;
+                        if (remainingQty > 0) {
+                            updatedOriginalRow.UnitPrice = updatedOriginalRow.ItemTotal / remainingQty;
+                        }
                     }
                 }
 
@@ -459,10 +479,18 @@
                 if (!isNaN(parsedValue) && parsedValue >= 0) {
                     newData[index][field] = parsedValue;
                     
-                    if (field === 'Quantity' || field === 'UnitPrice') {
-                        const qty = newData[index].Quantity || 0;
+                    if (field === 'Quantity') {
                         const price = newData[index].UnitPrice || 0;
-                        newData[index].ItemTotal = qty * price;
+                        newData[index].ItemTotal = parsedValue * price;
+                    } else if (field === 'UnitPrice') {
+                        const qty = newData[index].Quantity || 0;
+                        newData[index].ItemTotal = qty * parsedValue;
+                    } else if (field === 'ItemTotal') {
+                        // Calculate UnitPrice when ItemTotal is entered
+                        const qty = newData[index].Quantity || 0;
+                        if (qty > 0) {
+                            newData[index].UnitPrice = parsedValue / qty;
+                        }
                     }
                     
                     setInvoiceData(newData);
@@ -575,7 +603,14 @@
                                             <input
                                                 type="number"
                                                 value={quantity}
-                                                onChange={(e) => setQuantity(e.target.value)}
+                                                onChange={(e) => {
+                                                    setQuantity(e.target.value);
+                                                    // Auto-calculate unit price if item total is provided
+                                                    if (e.target.value && itemTotal) {
+                                                        const calculatedPrice = parseFloat(itemTotal) / parseFloat(e.target.value);
+                                                        setUnitPrice(calculatedPrice.toFixed(2));
+                                                    }
+                                                }}
                                                 placeholder="Original"
                                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                             />
@@ -597,7 +632,14 @@
                                                 type="number"
                                                 step="0.01"
                                                 value={itemTotal}
-                                                onChange={(e) => setItemTotal(e.target.value)}
+                                                onChange={(e) => {
+                                                    setItemTotal(e.target.value);
+                                                    // Auto-calculate unit price if quantity is provided
+                                                    if (e.target.value && quantity) {
+                                                        const calculatedPrice = parseFloat(e.target.value) / parseFloat(quantity);
+                                                        setUnitPrice(calculatedPrice.toFixed(2));
+                                                    }
+                                                }}
                                                 placeholder="Auto-calc"
                                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                             />

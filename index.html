@@ -9,17 +9,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Remove spinner arrows from number inputs */
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        input[type="number"] {
-            -moz-appearance: textfield;
-        }
-    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -64,6 +53,18 @@
             </svg>
         );
 
+        const Database = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+        );
+
+        const Loader = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        );
+
         // Customer configurations
         const CUSTOMERS = {
             grass: {
@@ -78,7 +79,7 @@
             vieler: {
                 name: 'Vieler',
                 color: 'blue',
-                dbFileName: 'updated_vieler_db.xlsx',
+                dbFileName: 'vieler_db.xlsx',
                 description: 'Vieler customer processing',
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
@@ -96,10 +97,19 @@
             manki: {
                 name: 'Manki',
                 color: 'orange',
-                dbFileName: 'updated_manki_db.xlsx',
+                dbFileName: 'UPDATED_MANKI_DB.xlsx',
                 description: 'Manki customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM2', 'TARIFF NUM51'],
                 tariffFilter: (tariff) => tariff.startsWith('3'),
+                partNumColumn: 'PRIMARY PART NUM'
+            },
+            eisenmann: {
+                name: 'Eisenmann',
+                color: 'indigo',
+                dbFileName: 'updated_eisenmann_db.xlsx',
+                description: 'Eisenmann customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM'
             }
         };
@@ -113,7 +123,7 @@
             const [message, setMessage] = useState(null);
             const [fileName, setFileName] = useState('');
             const [dbLoaded, setDbLoaded] = useState(false);
-            const [isLoadingDb, setIsLoadingDb] = useState(false);
+            const [dbLoading, setDbLoading] = useState(false);
             const [quantity, setQuantity] = useState('');
             const [unitPrice, setUnitPrice] = useState('');
             const [itemTotal, setItemTotal] = useState('');
@@ -124,22 +134,45 @@
 
             const currentCustomer = CUSTOMERS[selectedCustomer];
 
-            // Load database from repository
-            const loadDatabaseFromRepo = async () => {
-                setIsLoadingDb(true);
+            // Load database when customer changes
+            useEffect(() => {
+                loadCustomerDb();
+            }, [selectedCustomer]);
+
+            // Auto-calculate unit price when quantity and itemTotal change in override fields
+            useEffect(() => {
+                if (quantity !== '' && itemTotal !== '') {
+                    const qty = parseFloat(quantity);
+                    const total = parseFloat(itemTotal);
+                    if (qty > 0 && !isNaN(qty) && !isNaN(total)) {
+                        const calculatedUnitPrice = total / qty;
+                        setUnitPrice(calculatedUnitPrice.toFixed(2));
+                    }
+                }
+            }, [quantity, itemTotal]);
+
+            const loadCustomerDb = async () => {
+                setDbLoading(true);
                 setDbLoaded(false);
-                setMessage({ type: 'info', text: `Loading ${currentCustomer.name} database...` });
+                setInvoiceData([]);
+                setSelectedRow(null);
+                setQuantity('');
+                setUnitPrice('');
+                setItemTotal('');
+                setDuplicateCount(0);
+                setLastSelectedRow(null);
+                setFileName('');
+                setCustomerDbData([]);
+                setTariffMappings([]);
                 
                 try {
                     const response = await fetch(currentCustomer.dbFileName);
-                    
                     if (!response.ok) {
                         throw new Error(`Database file not found: ${currentCustomer.dbFileName}`);
                     }
                     
                     const arrayBuffer = await response.arrayBuffer();
-                    const data = new Uint8Array(arrayBuffer);
-                    const workbook = XLSX.read(data, { type: 'array' });
+                    const workbook = XLSX.read(arrayBuffer);
                     
                     // Load main database (first sheet)
                     const mainSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -150,37 +183,23 @@
                     if (workbook.SheetNames.includes('Sheet1')) {
                         const sheet1 = workbook.Sheets['Sheet1'];
                         const mappings = XLSX.utils.sheet_to_json(sheet1, { header: 1, defval: "" });
-                        setTariffMappings(mappings.slice(1));
+                        setTariffMappings(mappings.slice(1)); // Skip header row
                     }
                     
                     setDbLoaded(true);
-                    setIsLoadingDb(false);
-                    setMessage({ type: 'success', text: `${currentCustomer.name} database loaded successfully (${mainData.length} records)` });
+                    setMessage({ 
+                        type: 'success', 
+                        text: `${currentCustomer.name} database loaded successfully (${mainData.length} records)` 
+                    });
                 } catch (error) {
-                    setIsLoadingDb(false);
                     setMessage({ 
                         type: 'error', 
-                        text: `Error loading database: ${error.message}. Make sure ${currentCustomer.dbFileName} is in the same directory as this HTML file.` 
+                        text: `Error loading ${currentCustomer.name} database: ${error.message}. Make sure ${currentCustomer.dbFileName} is in the same directory.` 
                     });
+                } finally {
+                    setDbLoading(false);
                 }
             };
-
-            // Reset state when customer changes and load database
-            useEffect(() => {
-                setInvoiceData([]);
-                setSelectedRow(null);
-                setQuantity('');
-                setUnitPrice('');
-                setItemTotal('');
-                setDuplicateCount(0);
-                setLastSelectedRow(null);
-                setFileName('');
-                setDbLoaded(false);
-                setCustomerDbData([]);
-                setTariffMappings([]);
-                
-                loadDatabaseFromRepo();
-            }, [selectedCustomer]);
 
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
@@ -213,52 +232,61 @@
                 const normalizedPartNumber = String(partNumber || '').trim();
                 const config = currentCustomer;
                 
+                // Find the part in database
                 const part = customerDbData.find(row => {
                     const dbPartNum = String(row[config.partNumColumn] || '').trim();
                     return dbPartNum === normalizedPartNumber;
                 });
                 
+                // If part not found, return generic value
                 if (!part) {
-                    return { found: false, reason: `Part number ${partNumber} not found in ${currentCustomer.name} database` };
+                    const genericValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
+                    return { 
+                        found: true, 
+                        value: genericValue, 
+                        materialType,
+                        partNotFound: true 
+                    };
                 }
 
-                // Debug: collect all tariffs found
-                const foundTariffs = [];
+                // Look for valid tariff numbers based on customer's filter
                 let tariffNumber = null;
                 
                 for (const col of config.tariffColumns) {
                     const tariff = String(part[col] || '').trim();
-                    if (tariff) {
-                        foundTariffs.push({ column: col, value: tariff, passes: config.tariffFilter(tariff) });
-                        if (config.tariffFilter(tariff)) {
-                            tariffNumber = tariff;
-                            break;
-                        }
+                    if (tariff && config.tariffFilter(tariff)) {
+                        tariffNumber = tariff;
+                        break;
                     }
                 }
 
+                // If no valid tariff found, use generic value
                 if (!tariffNumber) {
-                    const filterDesc = selectedCustomer === 'manki' 
-                        ? 'starting with 3' 
-                        : 'not starting with 9';
-                    const debugInfo = foundTariffs.length > 0 
-                        ? ` Found tariffs: ${foundTariffs.map(t => `${t.value} (${t.passes ? 'pass' : 'fail'})`).join(', ')}`
-                        : ' No tariffs found in any column';
-                    return { found: false, reason: `No valid tariff number found (need ${filterDesc}).${debugInfo}` };
+                    const genericValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
+                    return { 
+                        found: true, 
+                        value: genericValue, 
+                        materialType,
+                        noValidTariff: true 
+                    };
                 }
 
+                // Check if tariff exists in Sheet1 mappings
                 const mapping = tariffMappings.find(row => {
                     const tariffCol = String(row[0] || '').trim();
                     const normalizedTariff = String(tariffNumber).trim();
                     return tariffCol === normalizedTariff;
                 });
 
+                // Determine which column to use based on material type
+                // Column 1 = Aluminum, Column 2 = Steel
                 const columnIndex = materialType === 'aluminum' ? 1 : 2;
                 
                 if (mapping && mapping[columnIndex]) {
                     return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
                 }
 
+                // Default based on material type if no mapping found
                 const defaultValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
                 return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
             };
@@ -278,11 +306,6 @@
                 const partNumber = rowToDuplicate.BuyerPartNumber;
                 
                 const tariffResult = findTariffValue(partNumber, materialType);
-                
-                if (!tariffResult.found) {
-                    setMessage({ type: 'error', text: tariffResult.reason });
-                    return;
-                }
 
                 const newRow = { ...rowToDuplicate };
                 newRow.BuyerPartNumber = tariffResult.value;
@@ -290,49 +313,58 @@
                 newRow._isDuplicate = true;
 
                 const hasCustomValues = quantity !== '' || unitPrice !== '' || itemTotal !== '';
+                
+                // Calculate new row values
+                let newRowQuantity = rowToDuplicate.Quantity;
+                let newRowUnitPrice = rowToDuplicate.UnitPrice;
                 let newRowItemTotal = rowToDuplicate.ItemTotal;
 
                 if (quantity !== '') {
-                    newRow.Quantity = parseFloat(quantity);
+                    newRowQuantity = parseFloat(quantity);
+                    newRow.Quantity = newRowQuantity;
                 }
                 if (unitPrice !== '') {
-                    newRow.UnitPrice = parseFloat(unitPrice);
+                    newRowUnitPrice = parseFloat(unitPrice);
+                    newRow.UnitPrice = newRowUnitPrice;
                 }
                 if (itemTotal !== '') {
-                    newRow.ItemTotal = parseFloat(itemTotal);
                     newRowItemTotal = parseFloat(itemTotal);
-                } else if (quantity !== '' && unitPrice !== '') {
-                    newRow.ItemTotal = parseFloat(quantity) * parseFloat(unitPrice);
-                    newRowItemTotal = parseFloat(quantity) * parseFloat(unitPrice);
+                    newRow.ItemTotal = newRowItemTotal;
+                }
+                
+                // Auto-calculate unit price if quantity and itemTotal provided but not unitPrice
+                if (quantity !== '' && itemTotal !== '' && unitPrice === '') {
+                    newRowUnitPrice = newRowItemTotal / newRowQuantity;
+                    newRow.UnitPrice = newRowUnitPrice;
                 } else if (quantity !== '' || unitPrice !== '') {
-                    const finalQuantity = quantity !== '' ? parseFloat(quantity) : rowToDuplicate.Quantity;
-                    const finalUnitPrice = unitPrice !== '' ? parseFloat(unitPrice) : rowToDuplicate.UnitPrice;
-                    newRow.ItemTotal = finalQuantity * finalUnitPrice;
-                    newRowItemTotal = finalQuantity * finalUnitPrice;
+                    // Recalculate ItemTotal based on provided values
+                    newRowItemTotal = newRowQuantity * newRowUnitPrice;
+                    newRow.ItemTotal = newRowItemTotal;
                 }
 
+                // Update original row if custom values were provided
                 let updatedOriginalRow = rowToDuplicate;
                 if (hasCustomValues) {
                     updatedOriginalRow = { ...rowToDuplicate };
                     
-                    // Only quantity provided and nothing else - reduce both quantity and recalculate ItemTotal
-                    if (quantity !== '' && unitPrice === '' && itemTotal === '') {
-                        const subtractedQuantity = parseFloat(quantity);
-                        const remainingQty = (rowToDuplicate.Quantity || 0) - subtractedQuantity;
-                        updatedOriginalRow.Quantity = remainingQty;
-                        updatedOriginalRow.ItemTotal = remainingQty * (rowToDuplicate.UnitPrice || 0);
-                        newRow._subtractedQuantity = subtractedQuantity;
+                    // Calculate remaining values for original row
+                    const remainingQuantity = (rowToDuplicate.Quantity || 0) - newRowQuantity;
+                    const remainingItemTotal = (rowToDuplicate.ItemTotal || 0) - newRowItemTotal;
+                    
+                    updatedOriginalRow.Quantity = remainingQuantity;
+                    updatedOriginalRow.ItemTotal = remainingItemTotal;
+                    
+                    // Recalculate unit price for original row based on remaining values
+                    if (remainingQuantity > 0) {
+                        updatedOriginalRow.UnitPrice = remainingItemTotal / remainingQuantity;
                     } else {
-                        // Any other case - quantity stays same, ItemTotal is reduced, unit price must be recalculated
-                        updatedOriginalRow.ItemTotal = (rowToDuplicate.ItemTotal || 0) - newRowItemTotal;
-                        newRow._subtractedItemTotal = newRowItemTotal;
-                        
-                        // Recalculate unit price for the original row
-                        const remainingQty = updatedOriginalRow.Quantity || 0;
-                        if (remainingQty > 0) {
-                            updatedOriginalRow.UnitPrice = updatedOriginalRow.ItemTotal / remainingQty;
-                        }
+                        updatedOriginalRow.UnitPrice = 0;
                     }
+                    
+                    // Store subtracted values for restoration on delete
+                    newRow._subtractedQuantity = newRowQuantity;
+                    newRow._subtractedUnitPrice = newRowUnitPrice;
+                    newRow._subtractedItemTotal = newRowItemTotal;
                 }
 
                 const insertPosition = selectedRow + duplicateCount + 1;
@@ -353,12 +385,21 @@
                 setDuplicateCount(duplicateCount + 1);
                 
                 const materialLabel = materialType === 'aluminum' ? 'Aluminum' : 'Steel';
-                let messageText = tariffResult.usingDefault 
-                    ? `Row duplicated for ${materialLabel} with default value. Tariff ${tariffResult.tariff} not found in mappings.`
-                    : `Row duplicated for ${materialLabel}! Applied: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
+                let messageText = '';
+                
+                // Build message based on the result
+                if (tariffResult.partNotFound) {
+                    messageText = `Part number not found in database - adding the generic ${materialLabel} line`;
+                } else if (tariffResult.noValidTariff) {
+                    messageText = `No valid tariff found for part - adding the generic ${materialLabel} line`;
+                } else if (tariffResult.usingDefault) {
+                    messageText = `Row duplicated for ${materialLabel} with default value. Tariff ${tariffResult.tariff} not found in mappings.`;
+                } else {
+                    messageText = `Row duplicated for ${materialLabel}! Applied: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
+                }
                 
                 if (hasCustomValues) {
-                    messageText += ` Original row's ItemTotal reduced by ${newRowItemTotal.toFixed(2)}.`;
+                    messageText += ` Original row updated: Qty=${updatedOriginalRow.Quantity.toFixed(2)}, Price=${updatedOriginalRow.UnitPrice.toFixed(2)}, Total=${updatedOriginalRow.ItemTotal.toFixed(2)}`;
                 }
                 
                 setMessage({ type: 'success', text: messageText });
@@ -381,6 +422,7 @@
                     delete newRow._isDuplicate;
                     delete newRow._subtractedItemTotal;
                     delete newRow._subtractedQuantity;
+                    delete newRow._subtractedUnitPrice;
                     
                     const dateColumns = ['InvoiceDate', 'PO_Date', 'DateOfExport'];
                     dateColumns.forEach(col => {
@@ -437,7 +479,9 @@
 
                 const newData = [...invoiceData];
                 
-                if (rowToDelete._subtractedItemTotal !== undefined) {
+                // Restore original row values if this duplicate had custom values
+                if (rowToDelete._subtractedQuantity !== undefined) {
+                    // Find the original row by searching backwards for the first non-duplicate
                     let originalRowIndex = -1;
                     for (let i = index - 1; i >= 0; i--) {
                         if (!newData[i]._isDuplicate) {
@@ -448,23 +492,33 @@
                     
                     if (originalRowIndex !== -1) {
                         newData[originalRowIndex] = { ...newData[originalRowIndex] };
-                        newData[originalRowIndex].ItemTotal = (newData[originalRowIndex].ItemTotal || 0) + rowToDelete._subtractedItemTotal;
                         
-                        if (rowToDelete._subtractedQuantity !== undefined) {
-                            newData[originalRowIndex].Quantity = (newData[originalRowIndex].Quantity || 0) + rowToDelete._subtractedQuantity;
+                        // Restore the values
+                        const restoredQuantity = (newData[originalRowIndex].Quantity || 0) + rowToDelete._subtractedQuantity;
+                        const restoredItemTotal = (newData[originalRowIndex].ItemTotal || 0) + rowToDelete._subtractedItemTotal;
+                        
+                        newData[originalRowIndex].Quantity = restoredQuantity;
+                        newData[originalRowIndex].ItemTotal = restoredItemTotal;
+                        
+                        // Recalculate unit price
+                        if (restoredQuantity > 0) {
+                            newData[originalRowIndex].UnitPrice = restoredItemTotal / restoredQuantity;
                         }
                     }
                 }
                 
+                // Remove the duplicate row
                 const finalData = newData.filter((_, i) => i !== index);
                 setInvoiceData(finalData);
                 
+                // Adjust selected row if necessary
                 if (selectedRow === index) {
                     setSelectedRow(null);
                 } else if (selectedRow !== null && index < selectedRow) {
                     setSelectedRow(selectedRow - 1);
                 }
                 
+                // Adjust duplicate count if we deleted a duplicate from the currently selected row
                 if (selectedRow !== null && index > selectedRow && duplicateCount > 0) {
                     setDuplicateCount(duplicateCount - 1);
                 }
@@ -479,17 +533,20 @@
                 if (!isNaN(parsedValue) && parsedValue >= 0) {
                     newData[index][field] = parsedValue;
                     
+                    // Auto-calculate based on which field was changed
                     if (field === 'Quantity') {
+                        const qty = parsedValue;
                         const price = newData[index].UnitPrice || 0;
-                        newData[index].ItemTotal = parsedValue * price;
+                        newData[index].ItemTotal = qty * price;
                     } else if (field === 'UnitPrice') {
                         const qty = newData[index].Quantity || 0;
-                        newData[index].ItemTotal = qty * parsedValue;
+                        const price = parsedValue;
+                        newData[index].ItemTotal = qty * price;
                     } else if (field === 'ItemTotal') {
-                        // Calculate UnitPrice when ItemTotal is entered
                         const qty = newData[index].Quantity || 0;
+                        const total = parsedValue;
                         if (qty > 0) {
-                            newData[index].UnitPrice = parsedValue / qty;
+                            newData[index].UnitPrice = total / qty;
                         }
                     }
                     
@@ -526,46 +583,50 @@
                         light: 'bg-orange-50',
                         text: 'text-orange-600',
                         border: 'border-orange-200'
+                    },
+                    indigo: {
+                        bg: 'bg-indigo-600',
+                        hover: 'hover:bg-indigo-700',
+                        light: 'bg-indigo-50',
+                        text: 'text-indigo-600',
+                        border: 'border-indigo-200'
                     }
                 };
                 return colors[currentCustomer.color][type];
             };
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-3">
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
                     <div className="max-w-7xl mx-auto">
+                        {/* Compact Header */}
                         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
                             <div className="flex items-center justify-between mb-3">
-                                <div>
-                                    <h1 className="text-2xl font-bold text-gray-800">Multi-Customer Invoice Tool</h1>
-                                    <p className="text-sm text-gray-600">Select customer and process invoices</p>
-                                </div>
+                                <h1 className="text-xl font-bold text-gray-800">Multi-Customer Invoice Tool</h1>
+                                {/* Customer Tabs - Compact */}
                                 <div className="flex gap-2">
                                     {Object.entries(CUSTOMERS).map(([key, customer]) => (
                                         <button
                                             key={key}
                                             onClick={() => setSelectedCustomer(key)}
+                                            disabled={dbLoading}
                                             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                                                 selectedCustomer === key
                                                     ? `bg-${customer.color}-600 text-white shadow-md`
                                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                            }`}
+                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
                                         >
                                             {customer.name}
                                         </button>
                                     ))}
                                 </div>
                             </div>
-
-                            <div className={`p-2 rounded-lg border text-xs ${getColorClasses('light')} ${getColorClasses('border')}`}>
-                                <span className="text-gray-700">{currentCustomer.description}</span>
-                                <span className="text-gray-600 ml-3">• DB: {currentCustomer.dbFileName} {dbLoaded && '✓'}</span>
-                            </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-lg p-3 mb-4 sticky top-0 z-50">
+                        {/* Main Control Panel - STICKY & COMPACT */}
+                        <div className="bg-white rounded-xl shadow-lg p-4 mb-4 sticky top-0 z-50">
+                            {/* Message Display */}
                             {message && (
-                                <div className={`mb-2 p-2 rounded-lg flex items-start gap-2 text-sm ${
+                                <div className={`mb-3 p-3 rounded-lg flex items-start gap-2 ${
                                     message.type === 'success' ? 'bg-green-50 border border-green-200' : 
                                     message.type === 'info' ? 'bg-blue-50 border border-blue-200' :
                                     'bg-red-50 border border-red-200'
@@ -577,78 +638,67 @@
                                             message.type === 'info' ? 'text-blue-600' : 'text-red-600'
                                         }`} />
                                     )}
-                                    <p className={
+                                    <p className={`text-sm ${
                                         message.type === 'success' ? 'text-green-800' : 
                                         message.type === 'info' ? 'text-blue-800' :
                                         'text-red-800'
-                                    }>{message.text}</p>
+                                    }`}>{message.text}</p>
                                 </div>
                             )}
 
-                            {isLoadingDb && (
-                                <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                            {/* Database Loading State */}
+                            {dbLoading && (
+                                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                                     <div className="flex items-center gap-2">
-                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                                        <p className="text-blue-800 text-sm">Loading {currentCustomer.name} database...</p>
+                                        <Loader className="w-4 h-4 text-blue-600 animate-spin" />
+                                        <p className="text-sm text-blue-800">Loading {currentCustomer.name} database...</p>
                                     </div>
                                 </div>
                             )}
 
+                            {/* Optional Values Input Section - Compact */}
                             {invoiceData.length > 0 && dbLoaded && (
-                                <div className="mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional Override Values:</h3>
-                                    <div className="grid grid-cols-3 gap-2">
+                                <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional: Override Values for Duplicated Row</h3>
+                                    <div className="grid grid-cols-3 gap-3">
                                         <div>
-                                            <label className="block text-xs text-gray-600 mb-0.5">Quantity</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
                                             <input
                                                 type="number"
                                                 value={quantity}
-                                                onChange={(e) => {
-                                                    setQuantity(e.target.value);
-                                                    // Auto-calculate unit price if item total is provided
-                                                    if (e.target.value && itemTotal) {
-                                                        const calculatedPrice = parseFloat(itemTotal) / parseFloat(e.target.value);
-                                                        setUnitPrice(calculatedPrice.toFixed(2));
-                                                    }
-                                                }}
-                                                placeholder="Original"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
+                                                onChange={(e) => setQuantity(e.target.value)}
+                                                placeholder="Use original"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs text-gray-600 mb-0.5">Unit Price</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Unit Price (auto-calc)</label>
                                             <input
                                                 type="number"
                                                 step="0.01"
                                                 value={unitPrice}
                                                 onChange={(e) => setUnitPrice(e.target.value)}
-                                                placeholder="Original"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
+                                                placeholder="Auto-calculated"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs text-gray-600 mb-0.5">Item Total</label>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Item Total</label>
                                             <input
                                                 type="number"
                                                 step="0.01"
                                                 value={itemTotal}
-                                                onChange={(e) => {
-                                                    setItemTotal(e.target.value);
-                                                    // Auto-calculate unit price if quantity is provided
-                                                    if (e.target.value && quantity) {
-                                                        const calculatedPrice = parseFloat(e.target.value) / parseFloat(quantity);
-                                                        setUnitPrice(calculatedPrice.toFixed(2));
-                                                    }
-                                                }}
-                                                placeholder="Auto-calc"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500"
+                                                onChange={(e) => setItemTotal(e.target.value)}
+                                                placeholder="Use original"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
                                             />
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            <div className="flex gap-2 mb-2 flex-wrap items-center">
+                            {/* Action Buttons - Compact */}
+                            <div className="flex gap-2 mb-3 flex-wrap">
                                 <input
                                     type="file"
                                     ref={fileInputRef}
@@ -658,8 +708,8 @@
                                 />
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
-                                    disabled={!dbLoaded || isLoadingDb}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
+                                    disabled={!dbLoaded || dbLoading}
+                                    className={`flex items-center gap-2 px-4 py-2 text-sm ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
                                 >
                                     <Upload className="w-4 h-4" />
                                     Upload Invoice
@@ -667,8 +717,8 @@
                                 
                                 <button
                                     onClick={() => duplicateRow('aluminum')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded || isLoadingDb}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
                                     <Copy className="w-4 h-4" />
                                     Aluminum
@@ -676,8 +726,8 @@
 
                                 <button
                                     onClick={() => duplicateRow('steel')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded || isLoadingDb}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
                                     <Copy className="w-4 h-4" />
                                     Steel
@@ -686,49 +736,51 @@
                                 <button
                                     onClick={downloadFile}
                                     disabled={invoiceData.length === 0}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
                                     <Download className="w-4 h-4" />
                                     Download
                                 </button>
+                            </div>
 
-                                <div className="flex gap-2 ml-auto text-xs">
-                                    <div className={`${getColorClasses('light')} rounded px-2 py-1`}>
-                                        <span className="text-gray-600">Customer: </span>
-                                        <span className={`font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</span>
-                                    </div>
-                                    <div className="bg-emerald-50 rounded px-2 py-1">
-                                        <span className="text-gray-600">Rows: </span>
-                                        <span className="font-bold text-emerald-600">{invoiceData.length > 0 ? invoiceData.length : '-'}</span>
-                                    </div>
-                                    <div className="bg-teal-50 rounded px-2 py-1">
-                                        <span className="text-gray-600">Selected: </span>
-                                        <span className="font-bold text-teal-600">{selectedRow !== null ? selectedRow + 1 : '-'}</span>
-                                    </div>
-                                    <div className="bg-cyan-50 rounded px-2 py-1">
-                                        <span className="text-gray-600">DB: </span>
-                                        <span className="font-bold text-cyan-600">
-                                            {isLoadingDb ? '...' : dbLoaded ? `${customerDbData.length}` : 'Error'}
-                                        </span>
-                                    </div>
+                            {/* Stats - Compact */}
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className={`${getColorClasses('light')} rounded-lg p-2`}>
+                                    <p className="text-xs text-gray-600">Customer</p>
+                                    <p className={`text-lg font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</p>
+                                </div>
+                                <div className="bg-emerald-50 rounded-lg p-2">
+                                    <p className="text-xs text-gray-600">Total Rows</p>
+                                    <p className="text-lg font-bold text-emerald-600">{invoiceData.length > 0 ? invoiceData.length : '-'}</p>
+                                </div>
+                                <div className="bg-teal-50 rounded-lg p-2">
+                                    <p className="text-xs text-gray-600">Selected Row</p>
+                                    <p className="text-lg font-bold text-teal-600">{selectedRow !== null ? selectedRow + 1 : '-'}</p>
+                                </div>
+                                <div className="bg-cyan-50 rounded-lg p-2">
+                                    <p className="text-xs text-gray-600">DB Records</p>
+                                    <p className="text-lg font-bold text-cyan-600">
+                                        {dbLoading ? '...' : dbLoaded ? customerDbData.length : '-'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
+                        {/* Data Table with Sticky Headers */}
                         {invoiceData.length > 0 && (
                             <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                                <div className="overflow-x-auto max-h-[calc(100vh-280px)] overflow-y-auto">
+                                <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
                                     <table className="w-full">
                                         <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Line #</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice #</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier Part #</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Quantity</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Unit Price</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Item Total</th>
-                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Line #</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Invoice #</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Supplier Part #</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Description</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Quantity</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Unit Price</th>
+                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Item Total</th>
+                                                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
@@ -750,7 +802,7 @@
                                                             : 'hover:bg-gray-50'
                                                     }`}
                                                 >
-                                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                                    <td className="px-3 py-2 text-sm font-medium text-gray-900">
                                                         {index + 1}
                                                         {row._isDuplicate && (
                                                             <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getColorClasses('bg')} text-white`}>
@@ -758,43 +810,43 @@
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-sm text-gray-700">{row.InvoiceNumber}</td>
-                                                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.SupplierPartNumber}</td>
-                                                    <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">{row.Description}</td>
-                                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                                    <td className="px-3 py-2 text-sm text-gray-700">{row.InvoiceNumber}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-900 font-medium">{row.SupplierPartNumber}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">{row.Description}</td>
+                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                                                         <input
                                                             type="number"
                                                             value={row.Quantity || ''}
                                                             onChange={(e) => updateRowValue(index, 'Quantity', e.target.value)}
-                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
                                                         />
                                                     </td>
-                                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                                                         <input
                                                             type="number"
                                                             step="0.01"
                                                             value={row.UnitPrice || ''}
                                                             onChange={(e) => updateRowValue(index, 'UnitPrice', e.target.value)}
-                                                            className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
                                                         />
                                                     </td>
-                                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                                                         <input
                                                             type="number"
                                                             step="0.01"
                                                             value={row.ItemTotal || ''}
                                                             onChange={(e) => updateRowValue(index, 'ItemTotal', e.target.value)}
-                                                            className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 font-semibold"
+                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 font-semibold"
                                                         />
                                                     </td>
-                                                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                    <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                                                         {row._isDuplicate ? (
                                                             <button
                                                                 onClick={() => deleteRow(index)}
-                                                                className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                                                                className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
                                                                 title="Delete this duplicated row"
                                                             >
-                                                                <Trash className="w-4 h-4 mr-1" />
+                                                                <Trash className="w-3 h-3 mr-1" />
                                                                 Delete
                                                             </button>
                                                         ) : (
@@ -809,7 +861,7 @@
                             </div>
                         )}
 
-                        {invoiceData.length === 0 && dbLoaded && (
+                        {invoiceData.length === 0 && dbLoaded && !dbLoading && (
                             <div className="bg-white rounded-xl shadow-lg p-8 text-center">
                                 <Upload className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                                 <p className="text-gray-600">Upload an invoice file to get started</p>

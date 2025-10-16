@@ -1,1050 +1,242 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Customer Invoice Tool</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Multi-Customer Invoice Tool (Grass + Manki)</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
-    <div id="root"></div>
+<div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useRef, useEffect } = React;
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
 
-        // Lucide Icons as inline SVG components
-        const Upload = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-        );
+/* ---------------- ICONS ---------------- */
+const Upload = ({ className }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>);
+const Copy = ({ className }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>);
+const Download = ({ className }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>);
 
-        const Copy = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-        );
+/* ---------------- CUSTOMER CONFIG ---------------- */
+const CUSTOMERS = {
+  grass: {
+    name: 'Grass',
+    color: 'green',
+    dbFileName: 'updated_grass_db.xlsx',
+    mappingFormat: 'standard',
+    tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1','TARIFF NUM_2','TARIFF NUM_3','TARIFF NUM_4'],
+    partNumColumn: 'PRIMARY PART NUM'
+  },
+  manki: {
+    name: 'Manki',
+    color: 'orange',
+    dbFileName: 'updated_manki_db.xlsx',
+    mappingFormat: 'manki',
+    tariffColumns: ['TARIFF NUM','TARIFF NUM_1','TARIFF NUM_2','TARIFF NUM_3','TARIFF NUM_4','TARIFF NUM_5'],
+    partNumColumn: 'PRIMARY PART NUM'
+  }
+};
 
-        const Download = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-        );
+/* ---------------- UTILITY ---------------- */
+const normalizeTariff = (t) => String(t || '').replace(/\D/g, '').trim();
 
-        const Trash = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-        );
+/* ---------------- MAIN COMPONENT ---------------- */
+function MultiCustomerTool() {
+  const [selectedCustomer, setSelectedCustomer] = useState('grass');
+  const [invoiceData, setInvoiceData] = useState([]);
+  const [dbData, setDbData] = useState([]);
+  const [tariffMappings, setTariffMappings] = useState([]);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [fileName, setFileName] = useState('');
+  const fileRef = useRef(null);
+  const customer = CUSTOMERS[selectedCustomer];
 
-        const AlertCircle = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        );
+  /* ---------------- LOAD DATABASE ---------------- */
+  useEffect(() => { loadDb(); }, [selectedCustomer]);
 
-        const CheckCircle = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        );
+  const loadDb = async () => {
+    setMsg({ type: 'info', text: `Loading ${customer.name} DB...` });
+    try {
+      const res = await fetch(customer.dbFileName);
+      if (!res.ok) throw new Error('Database not found');
+      const buf = await res.arrayBuffer();
+      const wb = XLSX.read(buf);
+      const main = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      setDbData(main);
+      if (wb.SheetNames.includes('Sheet1')) {
+        const sheet1 = XLSX.utils.sheet_to_json(wb.Sheets['Sheet1'], { header: 1, defval: '' });
+        setTariffMappings(sheet1.slice(1));
+      }
+      setMsg({ type: 'success', text: `${customer.name} DB loaded (${main.length} rows)` });
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message });
+    }
+  };
 
-        const Database = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-            </svg>
-        );
+  /* ---------------- FILE UPLOAD ---------------- */
+  const handleFile = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      setInvoiceData(data);
+      setFileName(f.name);
+      setMsg({ type: 'success', text: `Loaded ${data.length} rows` });
+    };
+    r.readAsArrayBuffer(f);
+  };
 
-        const Loader = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-        );
+  /* ---------------- FIND TARIFF VALUE ---------------- */
+  const findTariffValue = (partNumber, material, mode='content') => {
+    const cfg = customer;
+    const record = dbData.find(r => String(r[cfg.partNumColumn]||'').trim() === String(partNumber||'').trim());
+    if (!record)
+      return { value: material==='aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC', note:'Part not found' };
 
-        // Customer configurations
-        const CUSTOMERS = {
-            grass: {
-                name: 'Grass',
-                color: 'green',
-                dbFileName: 'updated_grass_db.xlsx',
-                description: 'Grass customer processing with aluminum/steel duplication',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard' // Tariff, Aluminum, Steel
-            },
-            vieler: {
-                name: 'Vieler',
-                color: 'blue',
-                dbFileName: 'vieler_db.xlsx',
-                description: 'Vieler customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard'
-            },
-            cb: {
-                name: 'CB Manufacturing',
-                color: 'purple',
-                dbFileName: 'updated_cbman_db.xlsx',
-                description: 'CB Manufacturing customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard'
-            },
-            manki: {
-                name: 'Manki',
-                color: 'orange',
-                dbFileName: 'updated_manki_db.xlsx',
-                description: 'Manki customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2','TARIFF NUM_3','TARIFF NUM_4', 'TARIFF NUM_5'],
-                tariffFilter: (tariff) => tariff.startsWith('3'),
-                partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'manki' // Tariff, "ALUM", AlumValue, "STEEL", SteelValue
-            },
-            eisenmann: {
-                name: 'Eisenmann',
-                color: 'indigo',
-                dbFileName: 'updated_eisenmann_db.xlsx',
-                description: 'Eisenmann customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard'
-            }
-        };
+    const tariffs = cfg.tariffColumns.map(c => String(record[c]||'').trim()).filter(Boolean);
+    if (tariffs.length === 0)
+      return { value: material==='aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC', note:'No tariff found' };
 
-        // Helper function to check if a tariff is a base tariff (starts with 1-97)
-        const isBaseTariff = (tariff) => {
-            const tariffStr = String(tariff || '').trim();
-            if (!tariffStr) return false;
-            
-            // Extract first two characters
-            const firstTwo = tariffStr.substring(0, 2);
-            const firstChar = tariffStr.substring(0, 1);
-            
-            // If tariff starts with 98 or 99, it's NOT a base tariff
-            const twoDigit = parseInt(firstTwo);
-            if (!isNaN(twoDigit)) {
-                if (twoDigit === 98 || twoDigit === 99) {
-                    return false;
-                }
-                if (twoDigit >= 10 && twoDigit <= 97) {
-                    return true;
-                }
-            }
-            
-            // Check single digit (1-9) - only if it's truly a single digit start
-            const oneDigit = parseInt(firstChar);
-            if (!isNaN(oneDigit) && oneDigit >= 1 && oneDigit <= 9) {
-                return true;
-            }
-            
-            return false;
-        };
+    const tariffNumber = normalizeTariff(tariffs[0]);
+    const mapping = tariffMappings.find(row => {
+      const tariffCol = normalizeTariff(row[0]);
+      if (cfg.mappingFormat === 'manki') {
+        // For Manki, direct match only
+        return tariffCol === tariffNumber;
+      } else {
+        // Standard (Grass etc.): need EXCL marker for content
+        const aluminumCol = String(row[1] || '').trim();
+        const steelCol = String(row[2] || '').trim();
+        return tariffCol === tariffNumber &&
+               (aluminumCol.includes('EXCL') || steelCol.includes('EXCL'));
+      }
+    });
 
-        function MultiCustomerTool() {
-            const [selectedCustomer, setSelectedCustomer] = useState('grass');
-            const [invoiceData, setInvoiceData] = useState([]);
-            const [customerDbData, setCustomerDbData] = useState([]);
-            const [tariffMappings, setTariffMappings] = useState([]);
-            const [selectedRow, setSelectedRow] = useState(null);
-            const [message, setMessage] = useState(null);
-            const [fileName, setFileName] = useState('');
-            const [dbLoaded, setDbLoaded] = useState(false);
-            const [dbLoading, setDbLoading] = useState(false);
-            const [quantity, setQuantity] = useState('');
-            const [unitPrice, setUnitPrice] = useState('');
-            const [itemTotal, setItemTotal] = useState('');
-            const [duplicateCount, setDuplicateCount] = useState(0);
-            const [lastSelectedRow, setLastSelectedRow] = useState(null);
-            
-            const fileInputRef = useRef(null);
+    if (!mapping)
+      return { value: mode==='all'
+        ? (material==='aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC')
+        : (material==='aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC'),
+        note:'No mapping found' };
 
-            const currentCustomer = CUSTOMERS[selectedCustomer];
+    const isManki = cfg.mappingFormat === 'manki';
+    const col = material==='aluminum' ? (isManki ? 1 : (mode==='all'?1:1)) : (isManki ? 2 : (mode==='all'?2:2));
+    const val = mapping[col] || (material==='aluminum' ? 'ALUM GENERIC' : 'STEEL GENERIC');
+    return { value: val.trim(), note:`Matched tariff ${tariffNumber}` };
+  };
 
-            // Load database when customer changes
-            useEffect(() => {
-                loadCustomerDb();
-            }, [selectedCustomer]);
+  /* ---------------- BUTTON ACTIONS ---------------- */
+  const applyTariff = (material, mode='content') => {
+    if (selectedRow===null) { setMsg({type:'error',text:'Select a row first'}); return; }
+    const row = invoiceData[selectedRow];
+    const part = row.BuyerPartNumber;
+    const result = findTariffValue(part, material, mode);
 
-            // Auto-calculate unit price when quantity and itemTotal change in override fields
-            useEffect(() => {
-                if (quantity !== '' && itemTotal !== '') {
-                    const qty = parseFloat(quantity);
-                    const total = parseFloat(itemTotal);
-                    if (qty > 0 && !isNaN(qty) && !isNaN(total)) {
-                        const calculatedUnitPrice = total / qty;
-                        setUnitPrice(calculatedUnitPrice.toFixed(2));
-                    }
-                }
-            }, [quantity, itemTotal]);
+    const newRow = { ...row, BuyerPartNumber: result.value, SupplierPartNumber: result.value };
+    const updated = [...invoiceData];
+    if (mode==='all') {
+      // Replace in place for ALL modes
+      updated[selectedRow] = newRow;
+    } else {
+      // Duplicate for content modes
+      updated.splice(selectedRow+1, 0, newRow);
+    }
 
-            const loadCustomerDb = async () => {
-                setDbLoading(true);
-                setDbLoaded(false);
-                setInvoiceData([]);
-                setSelectedRow(null);
-                setQuantity('');
-                setUnitPrice('');
-                setItemTotal('');
-                setDuplicateCount(0);
-                setLastSelectedRow(null);
-                setFileName('');
-                setCustomerDbData([]);
-                setTariffMappings([]);
-                
-                try {
-                    const response = await fetch(currentCustomer.dbFileName);
-                    if (!response.ok) {
-                        throw new Error(`Database file not found: ${currentCustomer.dbFileName}`);
-                    }
-                    
-                    const arrayBuffer = await response.arrayBuffer();
-                    const workbook = XLSX.read(arrayBuffer);
-                    
-                    // Load main database (first sheet)
-                    const mainSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const mainData = XLSX.utils.sheet_to_json(mainSheet, { defval: "" });
-                    setCustomerDbData(mainData);
-                    
-                    // Load Sheet1 for tariff mappings if it exists
-                    if (workbook.SheetNames.includes('Sheet1')) {
-                        const sheet1 = workbook.Sheets['Sheet1'];
-                        const mappings = XLSX.utils.sheet_to_json(sheet1, { header: 1, defval: "" });
-                        setTariffMappings(mappings.slice(1)); // Skip header row
-                    }
-                    
-                    setDbLoaded(true);
-                    setMessage({ 
-                        type: 'success', 
-                        text: `${currentCustomer.name} database loaded successfully (${mainData.length} records)` 
-                    });
-                } catch (error) {
-                    setMessage({ 
-                        type: 'error', 
-                        text: `Error loading ${currentCustomer.name} database: ${error.message}. Make sure ${currentCustomer.dbFileName} is in the same directory.` 
-                    });
-                } finally {
-                    setDbLoading(false);
-                }
-            };
+    setInvoiceData(updated);
+    setMsg({ type: 'success', text: `${result.value} applied (${result.note})` });
+  };
 
-            const handleFileUpload = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
+  /* ---------------- DOWNLOAD ---------------- */
+  const downloadFile = () => {
+    if (!invoiceData.length) { setMsg({ type: 'error', text: 'No data to download' }); return; }
+    const ws = XLSX.utils.json_to_sheet(invoiceData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const outName = fileName.replace('.xlsx', `_${selectedCustomer}_updated.xlsx`);
+    XLSX.writeFile(wb, outName);
+    setMsg({ type: 'success', text: `Downloaded: ${outName}` });
+  };
 
-                setFileName(file.name);
-                const reader = new FileReader();
-                
-                reader.onload = (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                        
-                        setInvoiceData(jsonData);
-                        setSelectedRow(null);
-                        setDuplicateCount(0);
-                        setLastSelectedRow(null);
-                        setMessage({ type: 'success', text: `Loaded ${jsonData.length} rows from ${file.name}` });
-                    } catch (error) {
-                        setMessage({ type: 'error', text: 'Error reading file: ' + error.message });
-                    }
-                };
-                
-                reader.readAsArrayBuffer(file);
-            };
+  /* ---------------- UI ---------------- */
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-4">
+        <h1 className="text-xl font-bold mb-3">Multi-Customer Invoice Tool (Grass + Manki)</h1>
 
-            // Helper function to get the value from mapping based on customer format
-            const getMappingValue = (mapping, materialType, config) => {
-                if (config.mappingFormat === 'manki') {
-                    // Manki format: Tariff, "ALUM", AlumValue, "STEEL", SteelValue
-                    // Column 2 = Aluminum, Column 4 = Steel
-                    const columnIndex = materialType === 'aluminum' ? 2 : 4;
-                    return mapping[columnIndex];
-                } else {
-                    // Standard format: Tariff, Aluminum, Steel
-                    // Column 1 = Aluminum, Column 2 = Steel
-                    const columnIndex = materialType === 'aluminum' ? 1 : 2;
-                    return mapping[columnIndex];
-                }
-            };
+        <div className="flex gap-2 mb-3">
+          {Object.entries(CUSTOMERS).map(([k,c])=>(
+            <button key={k} onClick={()=>setSelectedCustomer(k)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${selectedCustomer===k?`bg-${c.color}-600 text-white`:'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+              {c.name}
+            </button>
+          ))}
+        </div>
 
-            // Function for Content buttons (Aluminum Content / Steel Content)
-            const findTariffValueContent = (partNumber, materialType) => {
-                const normalizedPartNumber = String(partNumber || '').trim();
-                const config = currentCustomer;
-                
-                // Find the part in database
-                const part = customerDbData.find(row => {
-                    const dbPartNum = String(row[config.partNumColumn] || '').trim();
-                    return dbPartNum === normalizedPartNumber;
-                });
-                
-                // If part not found, return generic value
-                if (!part) {
-                    const genericValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        partNotFound: true 
-                    };
-                }
+        {msg && (
+          <div className={`p-3 mb-3 rounded border ${msg.type==='success'?'bg-green-50 border-green-200 text-green-700':msg.type==='error'?'bg-red-50 border-red-200 text-red-700':'bg-blue-50 border-blue-200 text-blue-700'}`}>
+            {msg.text}
+          </div>
+        )}
 
-                // Look for valid tariff numbers based on customer's filter
-                let tariffNumber = null;
-                
-                for (const col of config.tariffColumns) {
-                    const tariff = String(part[col] || '').trim();
-                    if (tariff && config.tariffFilter(tariff)) {
-                        tariffNumber = tariff;
-                        break;
-                    }
-                }
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <input type="file" ref={fileRef} onChange={handleFile} accept=".xlsx,.xls" className="hidden"/>
+          <button onClick={()=>fileRef.current?.click()} className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"><Upload className="w-4 h-4"/> Upload Invoice</button>
 
-                // If no valid tariff found, use generic value
-                if (!tariffNumber) {
-                    const genericValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        noValidTariff: true 
-                    };
-                }
+          <button onClick={()=>applyTariff('aluminum','all')} disabled={selectedRow===null} className="flex items-center gap-2 px-4 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700"><Copy className="w-4 h-4"/> All Aluminum</button>
 
-                // Look for mapping that contains "EXCL" or "ALUM"/"STEEL" in the appropriate column
-                const mapping = tariffMappings.find(row => {
-                    const tariffCol = String(row[0] || '').trim();
-                    
-                    if (config.mappingFormat === 'manki') {
-                        // For Manki: check if tariff matches and contains "ALUM" or "STEEL" markers
-                        const alumMarker = String(row[1] || '').trim();
-                        const steelMarker = String(row[3] || '').trim();
-                        return tariffCol === tariffNumber && 
-                               (alumMarker.includes('ALUM') || steelMarker.includes('STEEL'));
-                    } else {
-                        // For standard format: check if contains "EXCL"
-                        const aluminumCol = String(row[1] || '').trim();
-                        const steelCol = String(row[2] || '').trim();
-                        return tariffCol === tariffNumber && 
-                               (aluminumCol.includes('EXCL') || steelCol.includes('EXCL'));
-                    }
-                });
+          <button onClick={()=>applyTariff('steel','all')} disabled={selectedRow===null} className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-700 text-white rounded-lg hover:bg-gray-800"><Copy className="w-4 h-4"/> All Steel</button>
 
-                const value = mapping ? getMappingValue(mapping, materialType, config) : null;
-                
-                if (mapping && value) {
-                    return { found: true, value: value, tariff: tariffNumber, materialType };
-                }
+          <button onClick={()=>applyTariff('aluminum','content')} disabled={selectedRow===null} className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Copy className="w-4 h-4"/> Aluminum Content</button>
 
-                // Default if no mapping found
-                const defaultValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
-                return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
-            };
+          <button onClick={()=>applyTariff('steel','content')} disabled={selectedRow===null} className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700"><Copy className="w-4 h-4"/> Steel Content</button>
 
-            // Function for ALL buttons (All Aluminum / All Steel)
-            const findTariffValueAll = (partNumber, materialType) => {
-                const normalizedPartNumber = String(partNumber || '').trim();
-                const config = currentCustomer;
-                
-                // Find the part in database
-                const part = customerDbData.find(row => {
-                    const dbPartNum = String(row[config.partNumColumn] || '').trim();
-                    return dbPartNum === normalizedPartNumber;
-                });
-                
-                // If part not found, return generic value
-                if (!part) {
-                    const genericValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        partNotFound: true 
-                    };
-                }
+          <button onClick={downloadFile} disabled={!invoiceData.length} className="flex items-center gap-2 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700"><Download className="w-4 h-4"/> Download</button>
+        </div>
 
-                // Look for base tariffs (1-97)
-                let baseTariff = null;
-                
-                for (const col of config.tariffColumns) {
-                    const tariff = String(part[col] || '').trim();
-                    if (tariff && isBaseTariff(tariff)) {
-                        baseTariff = tariff;
-                        break;
-                    }
-                }
+        {invoiceData.length>0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 border">#</th>
+                  <th className="px-3 py-2 border">Invoice #</th>
+                  <th className="px-3 py-2 border">Supplier Part #</th>
+                  <th className="px-3 py-2 border">Description</th>
+                  <th className="px-3 py-2 border">Quantity</th>
+                  <th className="px-3 py-2 border">Unit Price</th>
+                  <th className="px-3 py-2 border">Item Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoiceData.map((row,i)=>(
+                  <tr key={i} onClick={()=>setSelectedRow(i)} className={`${selectedRow===i?'bg-green-50':''} cursor-pointer`}>
+                    <td className="px-3 py-2 border">{i+1}</td>
+                    <td className="px-3 py-2 border">{row.InvoiceNumber}</td>
+                    <td className="px-3 py-2 border">{row.SupplierPartNumber}</td>
+                    <td className="px-3 py-2 border">{row.Description}</td>
+                    <td className="px-3 py-2 border text-right">{row.Quantity}</td>
+                    <td className="px-3 py-2 border text-right">{row.UnitPrice}</td>
+                    <td className="px-3 py-2 border text-right">{row.ItemTotal}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-                // If no base tariff found, use generic value
-                if (!baseTariff) {
-                    const genericValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        noBaseTariff: true 
-                    };
-                }
-
-                // Look for mapping that contains "ALL" or just the tariff value
-                const mapping = tariffMappings.find(row => {
-                    const tariffCol = String(row[0] || '').trim();
-                    
-                    if (config.mappingFormat === 'manki') {
-                        // For Manki: just match the tariff
-                        return tariffCol === baseTariff;
-                    } else {
-                        // For standard format: check if contains "ALL"
-                        const aluminumCol = String(row[1] || '').trim();
-                        const steelCol = String(row[2] || '').trim();
-                        return tariffCol === baseTariff && 
-                               (aluminumCol.includes('ALL') || steelCol.includes('ALL'));
-                    }
-                });
-
-                const value = mapping ? getMappingValue(mapping, materialType, config) : null;
-                
-                if (mapping && value) {
-                    return { found: true, value: value, tariff: baseTariff, materialType };
-                }
-
-                // Default if no mapping found
-                const defaultValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
-                return { found: true, value: defaultValue, tariff: baseTariff, usingDefault: true, materialType };
-            };
-
-            const duplicateRow = (materialType, mode = 'content') => {
-                if (selectedRow === null) {
-                    setMessage({ type: 'error', text: 'Please select a row to duplicate' });
-                    return;
-                }
-
-                if (lastSelectedRow !== selectedRow) {
-                    setDuplicateCount(0);
-                    setLastSelectedRow(selectedRow);
-                }
-
-                const rowToModify = invoiceData[selectedRow];
-                const partNumber = rowToModify.BuyerPartNumber;
-                
-                // Use the appropriate function based on mode
-                const tariffResult = mode === 'all' 
-                    ? findTariffValueAll(partNumber, materialType)
-                    : findTariffValueContent(partNumber, materialType);
-
-                // Build message based on the result
-                const materialLabel = materialType === 'aluminum' ? 'Aluminum' : 'Steel';
-                const modeLabel = mode === 'all' ? 'ALL' : 'Content';
-                let messageText = '';
-                
-                if (tariffResult.partNotFound) {
-                    messageText = `Part number not found in database - using generic ${modeLabel} ${materialLabel} value`;
-                } else if (mode === 'all' && tariffResult.noBaseTariff) {
-                    messageText = `No base tariff (1-97) found for part - using generic ALL ${materialLabel} value`;
-                } else if (mode === 'content' && tariffResult.noValidTariff) {
-                    messageText = `No valid tariff found for part - using generic ${materialLabel} Content value`;
-                } else if (tariffResult.usingDefault) {
-                    messageText = `Using default ${modeLabel} ${materialLabel} value. Tariff ${tariffResult.tariff} not found in mappings.`;
-                } else {
-                    messageText = `Applied ${modeLabel} ${materialLabel}: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
-                }
-
-                // For "ALL" mode (All Aluminum / All Steel), REPLACE the line
-                if (mode === 'all') {
-                    const newData = [...invoiceData];
-                    newData[selectedRow] = {
-                        ...rowToModify,
-                        BuyerPartNumber: tariffResult.value,
-                        SupplierPartNumber: tariffResult.value
-                    };
-                    setInvoiceData(newData);
-                    setMessage({ type: 'success', text: `Line replaced with ${messageText}` });
-                    return;
-                }
-
-                // For "Content" mode (Aluminum Content / Steel Content), DUPLICATE the line
-                const newRow = { ...rowToModify };
-                newRow.BuyerPartNumber = tariffResult.value;
-                newRow.SupplierPartNumber = tariffResult.value;
-                newRow._isDuplicate = true;
-
-                const hasCustomValues = quantity !== '' || unitPrice !== '' || itemTotal !== '';
-                
-                // Calculate new row values
-                let newRowQuantity = rowToModify.Quantity;
-                let newRowUnitPrice = rowToModify.UnitPrice;
-                let newRowItemTotal = rowToModify.ItemTotal;
-
-                if (quantity !== '') {
-                    newRowQuantity = parseFloat(quantity);
-                    newRow.Quantity = newRowQuantity;
-                }
-                if (unitPrice !== '') {
-                    newRowUnitPrice = parseFloat(unitPrice);
-                    newRow.UnitPrice = newRowUnitPrice;
-                }
-                if (itemTotal !== '') {
-                    newRowItemTotal = parseFloat(itemTotal);
-                    newRow.ItemTotal = newRowItemTotal;
-                }
-                
-                // Auto-calculate unit price if quantity and itemTotal provided but not unitPrice
-                if (quantity !== '' && itemTotal !== '' && unitPrice === '') {
-                    newRowUnitPrice = newRowItemTotal / newRowQuantity;
-                    newRow.UnitPrice = newRowUnitPrice;
-                } else if (quantity !== '' || unitPrice !== '') {
-                    // Recalculate ItemTotal based on provided values
-                    newRowItemTotal = newRowQuantity * newRowUnitPrice;
-                    newRow.ItemTotal = newRowItemTotal;
-                }
-
-                // Update original row if custom values were provided
-                let updatedOriginalRow = rowToModify;
-                if (hasCustomValues) {
-                    updatedOriginalRow = { ...rowToModify };
-                    
-                    // Calculate remaining values for original row
-                    const remainingQuantity = (rowToModify.Quantity || 0) - newRowQuantity;
-                    const remainingItemTotal = (rowToModify.ItemTotal || 0) - newRowItemTotal;
-                    
-                    updatedOriginalRow.Quantity = remainingQuantity;
-                    updatedOriginalRow.ItemTotal = remainingItemTotal;
-                    
-                    // Recalculate unit price for original row based on remaining values
-                    if (remainingQuantity > 0) {
-                        updatedOriginalRow.UnitPrice = remainingItemTotal / remainingQuantity;
-                    } else {
-                        updatedOriginalRow.UnitPrice = 0;
-                    }
-                    
-                    // Store subtracted values for restoration on delete
-                    newRow._subtractedQuantity = newRowQuantity;
-                    newRow._subtractedUnitPrice = newRowUnitPrice;
-                    newRow._subtractedItemTotal = newRowItemTotal;
-                }
-
-                const insertPosition = selectedRow + duplicateCount + 1;
-                
-                const newData = hasCustomValues ? [
-                    ...invoiceData.slice(0, selectedRow),
-                    updatedOriginalRow,
-                    ...invoiceData.slice(selectedRow + 1, insertPosition),
-                    newRow,
-                    ...invoiceData.slice(insertPosition)
-                ] : [
-                    ...invoiceData.slice(0, insertPosition),
-                    newRow,
-                    ...invoiceData.slice(insertPosition)
-                ];
-
-                setInvoiceData(newData);
-                setDuplicateCount(duplicateCount + 1);
-                
-                if (hasCustomValues) {
-                    messageText += ` Original row updated: Qty=${updatedOriginalRow.Quantity.toFixed(2)}, Price=${updatedOriginalRow.UnitPrice.toFixed(2)}, Total=${updatedOriginalRow.ItemTotal.toFixed(2)}`;
-                }
-                
-                setMessage({ type: 'success', text: `Row duplicated for ${messageText}` });
-                
-                setQuantity('');
-                setUnitPrice('');
-                setItemTotal('');
-            };
-
-            const downloadFile = () => {
-                if (invoiceData.length === 0) {
-                    setMessage({ type: 'error', text: 'No data to download' });
-                    return;
-                }
-
-                const processedData = invoiceData.map(row => {
-                    const newRow = { ...row };
-                    
-                    delete newRow._duplicateGroupId;
-                    delete newRow._isDuplicate;
-                    delete newRow._subtractedItemTotal;
-                    delete newRow._subtractedQuantity;
-                    delete newRow._subtractedUnitPrice;
-                    
-                    const dateColumns = ['InvoiceDate', 'PO_Date', 'DateOfExport'];
-                    dateColumns.forEach(col => {
-                        if (newRow[col]) {
-                            if (typeof newRow[col] === 'number') {
-                                const date = XLSX.SSF.parse_date_code(newRow[col]);
-                                newRow[col] = new Date(date.y, date.m - 1, date.d);
-                            } else if (typeof newRow[col] === 'string') {
-                                const date = new Date(newRow[col]);
-                                if (!isNaN(date.getTime())) {
-                                    newRow[col] = date;
-                                }
-                            }
-                        }
-                    });
-                    
-                    return newRow;
-                });
-
-                const worksheet = XLSX.utils.json_to_sheet(processedData);
-                
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                const header = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0];
-                
-                ['InvoiceDate', 'PO_Date', 'DateOfExport'].forEach(dateCol => {
-                    const colIndex = header.indexOf(dateCol);
-                    if (colIndex !== -1) {
-                        const colLetter = XLSX.utils.encode_col(colIndex);
-                        for (let row = 1; row <= range.e.r; row++) {
-                            const cellAddress = `${colLetter}${row + 1}`;
-                            if (worksheet[cellAddress] && worksheet[cellAddress].t !== 's') {
-                                worksheet[cellAddress].z = 'mm/dd/yyyy';
-                            }
-                        }
-                    }
-                });
-                
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-                
-                const newFileName = fileName.replace('.xlsx', `_${selectedCustomer}_updated.xlsx`);
-                XLSX.writeFile(workbook, newFileName);
-                
-                setMessage({ type: 'success', text: `File downloaded as ${newFileName}` });
-            };
-
-            const deleteRow = (index) => {
-                const rowToDelete = invoiceData[index];
-                
-                if (!rowToDelete._isDuplicate) {
-                    setMessage({ type: 'error', text: 'Cannot delete original data rows. Only duplicated rows can be deleted.' });
-                    return;
-                }
-
-                const newData = [...invoiceData];
-                
-                // Restore original row values if this duplicate had custom values
-                if (rowToDelete._subtractedQuantity !== undefined) {
-                    // Find the original row by searching backwards for the first non-duplicate
-                    let originalRowIndex = -1;
-                    for (let i = index - 1; i >= 0; i--) {
-                        if (!newData[i]._isDuplicate) {
-                            originalRowIndex = i;
-                            break;
-                        }
-                    }
-                    
-                    if (originalRowIndex !== -1) {
-                        newData[originalRowIndex] = { ...newData[originalRowIndex] };
-                        
-                        // Restore the values
-                        const restoredQuantity = (newData[originalRowIndex].Quantity || 0) + rowToDelete._subtractedQuantity;
-                        const restoredItemTotal = (newData[originalRowIndex].ItemTotal || 0) + rowToDelete._subtractedItemTotal;
-                        
-                        newData[originalRowIndex].Quantity = restoredQuantity;
-                        newData[originalRowIndex].ItemTotal = restoredItemTotal;
-                        
-                        // Recalculate unit price
-                        if (restoredQuantity > 0) {
-                            newData[originalRowIndex].UnitPrice = restoredItemTotal / restoredQuantity;
-                        }
-                    }
-                }
-                
-                // Remove the duplicate row
-                const finalData = newData.filter((_, i) => i !== index);
-                setInvoiceData(finalData);
-                
-                // Adjust selected row if necessary
-                if (selectedRow === index) {
-                    setSelectedRow(null);
-                } else if (selectedRow !== null && index < selectedRow) {
-                    setSelectedRow(selectedRow - 1);
-                }
-                
-                // Adjust duplicate count if we deleted a duplicate from the currently selected row
-                if (selectedRow !== null && index > selectedRow && duplicateCount > 0) {
-                    setDuplicateCount(duplicateCount - 1);
-                }
-                
-                setMessage({ type: 'success', text: 'Duplicated row deleted and original values restored.' });
-            };
-
-            const updateRowValue = (index, field, value) => {
-                const newData = [...invoiceData];
-                const parsedValue = parseFloat(value);
-                
-                if (!isNaN(parsedValue) && parsedValue >= 0) {
-                    newData[index][field] = parsedValue;
-                    
-                    // Auto-calculate based on which field was changed
-                    if (field === 'Quantity') {
-                        const qty = parsedValue;
-                        const price = newData[index].UnitPrice || 0;
-                        newData[index].ItemTotal = qty * price;
-                    } else if (field === 'UnitPrice') {
-                        const qty = newData[index].Quantity || 0;
-                        const price = parsedValue;
-                        newData[index].ItemTotal = qty * price;
-                    } else if (field === 'ItemTotal') {
-                        const qty = newData[index].Quantity || 0;
-                        const total = parsedValue;
-                        if (qty > 0) {
-                            newData[index].UnitPrice = total / qty;
-                        }
-                    }
-                    
-                    setInvoiceData(newData);
-                }
-            };
-
-            const getColorClasses = (type) => {
-                const colors = {
-                    green: {
-                        bg: 'bg-green-600',
-                        hover: 'hover:bg-green-700',
-                        light: 'bg-green-50',
-                        text: 'text-green-600',
-                        border: 'border-green-200'
-                    },
-                    blue: {
-                        bg: 'bg-blue-600',
-                        hover: 'hover:bg-blue-700',
-                        light: 'bg-blue-50',
-                        text: 'text-blue-600',
-                        border: 'border-blue-200'
-                    },
-                    purple: {
-                        bg: 'bg-purple-600',
-                        hover: 'hover:bg-purple-700',
-                        light: 'bg-purple-50',
-                        text: 'text-purple-600',
-                        border: 'border-purple-200'
-                    },
-                    orange: {
-                        bg: 'bg-orange-600',
-                        hover: 'hover:bg-orange-700',
-                        light: 'bg-orange-50',
-                        text: 'text-orange-600',
-                        border: 'border-orange-200'
-                    },
-                    indigo: {
-                        bg: 'bg-indigo-600',
-                        hover: 'hover:bg-indigo-700',
-                        light: 'bg-indigo-50',
-                        text: 'text-indigo-600',
-                        border: 'border-indigo-200'
-                    }
-                };
-                return colors[currentCustomer.color][type];
-            };
-
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-                    <div className="max-w-7xl mx-auto">
-                        {/* Compact Header */}
-                        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-                            <div className="flex items-center justify-between mb-3">
-                                <h1 className="text-xl font-bold text-gray-800">Multi-Customer Invoice Tool</h1>
-                                {/* Customer Tabs - Compact */}
-                                <div className="flex gap-2">
-                                    {Object.entries(CUSTOMERS).map(([key, customer]) => (
-                                        <button
-                                            key={key}
-                                            onClick={() => setSelectedCustomer(key)}
-                                            disabled={dbLoading}
-                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                                                selectedCustomer === key
-                                                    ? `bg-${customer.color}-600 text-white shadow-md`
-                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                        >
-                                            {customer.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Main Control Panel - STICKY & COMPACT */}
-                        <div className="bg-white rounded-xl shadow-lg p-4 mb-4 sticky top-0 z-50">
-                            {/* Message Display */}
-                            {message && (
-                                <div className={`mb-3 p-3 rounded-lg flex items-start gap-2 ${
-                                    message.type === 'success' ? 'bg-green-50 border border-green-200' : 
-                                    message.type === 'info' ? 'bg-blue-50 border border-blue-200' :
-                                    'bg-red-50 border border-red-200'
-                                }`}>
-                                    {message.type === 'success' ? (
-                                        <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                                    ) : (
-                                        <AlertCircle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                                            message.type === 'info' ? 'text-blue-600' : 'text-red-600'
-                                        }`} />
-                                    )}
-                                    <p className={`text-sm ${
-                                        message.type === 'success' ? 'text-green-800' : 
-                                        message.type === 'info' ? 'text-blue-800' :
-                                        'text-red-800'
-                                    }`}>{message.text}</p>
-                                </div>
-                            )}
-
-                            {/* Database Loading State */}
-                            {dbLoading && (
-                                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <Loader className="w-4 h-4 text-blue-600 animate-spin" />
-                                        <p className="text-sm text-blue-800">Loading {currentCustomer.name} database...</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Optional Values Input Section - Compact */}
-                            {invoiceData.length > 0 && dbLoaded && (
-                                <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional: Override Values for Duplicated Row (Content buttons only)</h3>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
-                                            <input
-                                                type="number"
-                                                value={quantity}
-                                                onChange={(e) => setQuantity(e.target.value)}
-                                                placeholder="Use original"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Unit Price (auto-calc)</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={unitPrice}
-                                                onChange={(e) => setUnitPrice(e.target.value)}
-                                                placeholder="Auto-calculated"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Item Total</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={itemTotal}
-                                                onChange={(e) => setItemTotal(e.target.value)}
-                                                placeholder="Use original"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Action Buttons - Updated with new buttons and names */}
-                            <div className="flex gap-2 mb-3 flex-wrap">
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={handleFileUpload}
-                                    accept=".xlsx,.xls"
-                                    className="hidden"
-                                />
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={!dbLoaded || dbLoading}
-                                    className={`flex items-center gap-2 px-4 py-2 text-sm ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
-                                >
-                                    <Upload className="w-4 h-4" />
-                                    Upload Invoice
-                                </button>
-                                
-                                {/* New ALL buttons - REPLACE line */}
-                                <button
-                                    onClick={() => duplicateRow('aluminum', 'all')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    All Aluminum
-                                </button>
-
-                                <button
-                                    onClick={() => duplicateRow('steel', 'all')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    All Steel
-                                </button>
-
-                                {/* Renamed Content buttons - DUPLICATE line */}
-                                <button
-                                    onClick={() => duplicateRow('aluminum', 'content')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    Aluminum Content
-                                </button>
-
-                                <button
-                                    onClick={() => duplicateRow('steel', 'content')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    Steel Content
-                                </button>
-
-                                <button
-                                    onClick={downloadFile}
-                                    disabled={invoiceData.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    Download
-                                </button>
-                            </div>
-
-                            {/* Stats - Compact */}
-                            <div className="grid grid-cols-4 gap-2">
-                                <div className={`${getColorClasses('light')} rounded-lg p-2`}>
-                                    <p className="text-xs text-gray-600">Customer</p>
-                                    <p className={`text-lg font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</p>
-                                </div>
-                                <div className="bg-emerald-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">Total Rows</p>
-                                    <p className="text-lg font-bold text-emerald-600">{invoiceData.length > 0 ? invoiceData.length : '-'}</p>
-                                </div>
-                                <div className="bg-teal-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">Selected Row</p>
-                                    <p className="text-lg font-bold text-teal-600">{selectedRow !== null ? selectedRow + 1 : '-'}</p>
-                                </div>
-                                <div className="bg-cyan-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">DB Records</p>
-                                    <p className="text-lg font-bold text-cyan-600">
-                                        {dbLoading ? '...' : dbLoaded ? customerDbData.length : '-'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Data Table with Sticky Headers */}
-                        {invoiceData.length > 0 && (
-                            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                                <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                                    <table className="w-full">
-                                        <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                                            <tr>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Line #</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Invoice #</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Supplier Part #</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Description</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Quantity</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Unit Price</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Item Total</th>
-                                                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200">
-                                            {invoiceData.map((row, index) => (
-                                                <tr
-                                                    key={index}
-                                                    onClick={() => {
-                                                        setSelectedRow(index);
-                                                        if (lastSelectedRow !== index) {
-                                                            setDuplicateCount(0);
-                                                            setLastSelectedRow(index);
-                                                        }
-                                                    }}
-                                                    className={`transition-colors cursor-pointer ${
-                                                        selectedRow === index
-                                                            ? getColorClasses('light')
-                                                            : row._isDuplicate 
-                                                            ? 'bg-emerald-50 hover:bg-emerald-100'
-                                                            : 'hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    <td className="px-3 py-2 text-sm font-medium text-gray-900">
-                                                        {index + 1}
-                                                        {row._isDuplicate && (
-                                                            <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getColorClasses('bg')} text-white`}>
-                                                                DUP
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-sm text-gray-700">{row.InvoiceNumber}</td>
-                                                    <td className="px-3 py-2 text-sm text-gray-900 font-medium">{row.SupplierPartNumber}</td>
-                                                    <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">{row.Description}</td>
-                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                                        <input
-                                                            type="number"
-                                                            value={row.Quantity || ''}
-                                                            onChange={(e) => updateRowValue(index, 'Quantity', e.target.value)}
-                                                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                        />
-                                                    </td>
-                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={row.UnitPrice || ''}
-                                                            onChange={(e) => updateRowValue(index, 'UnitPrice', e.target.value)}
-                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                        />
-                                                    </td>
-                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={row.ItemTotal || ''}
-                                                            onChange={(e) => updateRowValue(index, 'ItemTotal', e.target.value)}
-                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 font-semibold"
-                                                        />
-                                                    </td>
-                                                    <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                                                        {row._isDuplicate ? (
-                                                            <button
-                                                                onClick={() => deleteRow(index)}
-                                                                className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
-                                                                title="Delete this duplicated row"
-                                                            >
-                                                                <Trash className="w-3 h-3 mr-1" />
-                                                                Delete
-                                                            </button>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400">Original</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
-                        {invoiceData.length === 0 && dbLoaded && !dbLoading && (
-                            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-                                <Upload className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                <p className="text-gray-600">Upload an invoice file to get started</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<MultiCustomerTool />);
-    </script>
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<MultiCustomerTool />);
+</script>
 </body>
 </html>

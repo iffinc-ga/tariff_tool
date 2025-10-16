@@ -114,6 +114,35 @@
             }
         };
 
+        // Helper function to check if a tariff is a base tariff (starts with 1-97)
+        const isBaseTariff = (tariff) => {
+            const tariffStr = String(tariff || '').trim();
+            if (!tariffStr) return false;
+            
+            // Extract first two characters
+            const firstTwo = tariffStr.substring(0, 2);
+            const firstChar = tariffStr.substring(0, 1);
+            
+            // If tariff starts with 98 or 99, it's NOT a base tariff
+            const twoDigit = parseInt(firstTwo);
+            if (!isNaN(twoDigit)) {
+                if (twoDigit === 98 || twoDigit === 99) {
+                    return false;
+                }
+                if (twoDigit >= 10 && twoDigit <= 97) {
+                    return true;
+                }
+            }
+            
+            // Check single digit (1-9) - only if it's truly a single digit start
+            const oneDigit = parseInt(firstChar);
+            if (!isNaN(oneDigit) && oneDigit >= 1 && oneDigit <= 9) {
+                return true;
+            }
+            
+            return false;
+        };
+
         function MultiCustomerTool() {
             const [selectedCustomer, setSelectedCustomer] = useState('grass');
             const [invoiceData, setInvoiceData] = useState([]);
@@ -228,7 +257,8 @@
                 reader.readAsArrayBuffer(file);
             };
 
-            const findTariffValue = (partNumber, materialType) => {
+            // Function for Content buttons (Aluminum Content / Steel Content)
+            const findTariffValueContent = (partNumber, materialType) => {
                 const normalizedPartNumber = String(partNumber || '').trim();
                 const config = currentCustomer;
                 
@@ -271,14 +301,17 @@
                     };
                 }
 
-                // Check if tariff exists in Sheet1 mappings
+                // Look for mapping that contains "EXCL" in the appropriate column
                 const mapping = tariffMappings.find(row => {
                     const tariffCol = String(row[0] || '').trim();
-                    const normalizedTariff = String(tariffNumber).trim();
-                    return tariffCol === normalizedTariff;
+                    const aluminumCol = String(row[1] || '').trim();
+                    const steelCol = String(row[2] || '').trim();
+                    
+                    // Match tariff AND check that this is an EXCL row (not ALL row)
+                    return tariffCol === tariffNumber && 
+                           (aluminumCol.includes('EXCL') || steelCol.includes('EXCL'));
                 });
 
-                // Determine which column to use based on material type
                 // Column 1 = Aluminum, Column 2 = Steel
                 const columnIndex = materialType === 'aluminum' ? 1 : 2;
                 
@@ -286,12 +319,79 @@
                     return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
                 }
 
-                // Default based on material type if no mapping found
+                // Default if no mapping found
                 const defaultValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
                 return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
             };
 
-            const duplicateRow = (materialType) => {
+            // Function for ALL buttons (All Aluminum / All Steel)
+            const findTariffValueAll = (partNumber, materialType) => {
+                const normalizedPartNumber = String(partNumber || '').trim();
+                const config = currentCustomer;
+                
+                // Find the part in database
+                const part = customerDbData.find(row => {
+                    const dbPartNum = String(row[config.partNumColumn] || '').trim();
+                    return dbPartNum === normalizedPartNumber;
+                });
+                
+                // If part not found, return generic value
+                if (!part) {
+                    const genericValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
+                    return { 
+                        found: true, 
+                        value: genericValue, 
+                        materialType,
+                        partNotFound: true 
+                    };
+                }
+
+                // Look for base tariffs (1-97)
+                let baseTariff = null;
+                
+                for (const col of config.tariffColumns) {
+                    const tariff = String(part[col] || '').trim();
+                    if (tariff && isBaseTariff(tariff)) {
+                        baseTariff = tariff;
+                        break;
+                    }
+                }
+
+                // If no base tariff found, use generic value
+                if (!baseTariff) {
+                    const genericValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
+                    return { 
+                        found: true, 
+                        value: genericValue, 
+                        materialType,
+                        noBaseTariff: true 
+                    };
+                }
+
+                // Look for mapping that contains "ALL" in the appropriate column
+                const mapping = tariffMappings.find(row => {
+                    const tariffCol = String(row[0] || '').trim();
+                    const aluminumCol = String(row[1] || '').trim();
+                    const steelCol = String(row[2] || '').trim();
+                    
+                    // Match tariff AND check that this is an ALL row (not EXCL row)
+                    return tariffCol === baseTariff && 
+                           (aluminumCol.includes('ALL') || steelCol.includes('ALL'));
+                });
+
+                // Column 1 = Aluminum, Column 2 = Steel
+                const columnIndex = materialType === 'aluminum' ? 1 : 2;
+                
+                if (mapping && mapping[columnIndex]) {
+                    return { found: true, value: mapping[columnIndex], tariff: baseTariff, materialType };
+                }
+
+                // Default if no mapping found
+                const defaultValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
+                return { found: true, value: defaultValue, tariff: baseTariff, usingDefault: true, materialType };
+            };
+
+            const duplicateRow = (materialType, mode = 'content') => {
                 if (selectedRow === null) {
                     setMessage({ type: 'error', text: 'Please select a row to duplicate' });
                     return;
@@ -302,12 +402,46 @@
                     setLastSelectedRow(selectedRow);
                 }
 
-                const rowToDuplicate = invoiceData[selectedRow];
-                const partNumber = rowToDuplicate.BuyerPartNumber;
+                const rowToModify = invoiceData[selectedRow];
+                const partNumber = rowToModify.BuyerPartNumber;
                 
-                const tariffResult = findTariffValue(partNumber, materialType);
+                // Use the appropriate function based on mode
+                const tariffResult = mode === 'all' 
+                    ? findTariffValueAll(partNumber, materialType)
+                    : findTariffValueContent(partNumber, materialType);
 
-                const newRow = { ...rowToDuplicate };
+                // Build message based on the result
+                const materialLabel = materialType === 'aluminum' ? 'Aluminum' : 'Steel';
+                const modeLabel = mode === 'all' ? 'ALL' : 'Content';
+                let messageText = '';
+                
+                if (tariffResult.partNotFound) {
+                    messageText = `Part number not found in database - using generic ${modeLabel} ${materialLabel} value`;
+                } else if (mode === 'all' && tariffResult.noBaseTariff) {
+                    messageText = `No base tariff (1-97) found for part - using generic ALL ${materialLabel} value`;
+                } else if (mode === 'content' && tariffResult.noValidTariff) {
+                    messageText = `No valid tariff found for part - using generic ${materialLabel} Content value`;
+                } else if (tariffResult.usingDefault) {
+                    messageText = `Using default ${modeLabel} ${materialLabel} value. Tariff ${tariffResult.tariff} not found in mappings.`;
+                } else {
+                    messageText = `Applied ${modeLabel} ${materialLabel}: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
+                }
+
+                // For "ALL" mode (All Aluminum / All Steel), REPLACE the line
+                if (mode === 'all') {
+                    const newData = [...invoiceData];
+                    newData[selectedRow] = {
+                        ...rowToModify,
+                        BuyerPartNumber: tariffResult.value,
+                        SupplierPartNumber: tariffResult.value
+                    };
+                    setInvoiceData(newData);
+                    setMessage({ type: 'success', text: `Line replaced with ${messageText}` });
+                    return;
+                }
+
+                // For "Content" mode (Aluminum Content / Steel Content), DUPLICATE the line
+                const newRow = { ...rowToModify };
                 newRow.BuyerPartNumber = tariffResult.value;
                 newRow.SupplierPartNumber = tariffResult.value;
                 newRow._isDuplicate = true;
@@ -315,9 +449,9 @@
                 const hasCustomValues = quantity !== '' || unitPrice !== '' || itemTotal !== '';
                 
                 // Calculate new row values
-                let newRowQuantity = rowToDuplicate.Quantity;
-                let newRowUnitPrice = rowToDuplicate.UnitPrice;
-                let newRowItemTotal = rowToDuplicate.ItemTotal;
+                let newRowQuantity = rowToModify.Quantity;
+                let newRowUnitPrice = rowToModify.UnitPrice;
+                let newRowItemTotal = rowToModify.ItemTotal;
 
                 if (quantity !== '') {
                     newRowQuantity = parseFloat(quantity);
@@ -343,13 +477,13 @@
                 }
 
                 // Update original row if custom values were provided
-                let updatedOriginalRow = rowToDuplicate;
+                let updatedOriginalRow = rowToModify;
                 if (hasCustomValues) {
-                    updatedOriginalRow = { ...rowToDuplicate };
+                    updatedOriginalRow = { ...rowToModify };
                     
                     // Calculate remaining values for original row
-                    const remainingQuantity = (rowToDuplicate.Quantity || 0) - newRowQuantity;
-                    const remainingItemTotal = (rowToDuplicate.ItemTotal || 0) - newRowItemTotal;
+                    const remainingQuantity = (rowToModify.Quantity || 0) - newRowQuantity;
+                    const remainingItemTotal = (rowToModify.ItemTotal || 0) - newRowItemTotal;
                     
                     updatedOriginalRow.Quantity = remainingQuantity;
                     updatedOriginalRow.ItemTotal = remainingItemTotal;
@@ -384,25 +518,11 @@
                 setInvoiceData(newData);
                 setDuplicateCount(duplicateCount + 1);
                 
-                const materialLabel = materialType === 'aluminum' ? 'Aluminum' : 'Steel';
-                let messageText = '';
-                
-                // Build message based on the result
-                if (tariffResult.partNotFound) {
-                    messageText = `Part number not found in database - adding the generic ${materialLabel} line`;
-                } else if (tariffResult.noValidTariff) {
-                    messageText = `No valid tariff found for part - adding the generic ${materialLabel} line`;
-                } else if (tariffResult.usingDefault) {
-                    messageText = `Row duplicated for ${materialLabel} with default value. Tariff ${tariffResult.tariff} not found in mappings.`;
-                } else {
-                    messageText = `Row duplicated for ${materialLabel}! Applied: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
-                }
-                
                 if (hasCustomValues) {
                     messageText += ` Original row updated: Qty=${updatedOriginalRow.Quantity.toFixed(2)}, Price=${updatedOriginalRow.UnitPrice.toFixed(2)}, Total=${updatedOriginalRow.ItemTotal.toFixed(2)}`;
                 }
                 
-                setMessage({ type: 'success', text: messageText });
+                setMessage({ type: 'success', text: `Row duplicated for ${messageText}` });
                 
                 setQuantity('');
                 setUnitPrice('');
@@ -659,7 +779,7 @@
                             {/* Optional Values Input Section - Compact */}
                             {invoiceData.length > 0 && dbLoaded && (
                                 <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional: Override Values for Duplicated Row</h3>
+                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional: Override Values for Duplicated Row (Content buttons only)</h3>
                                     <div className="grid grid-cols-3 gap-3">
                                         <div>
                                             <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
@@ -697,7 +817,7 @@
                                 </div>
                             )}
 
-                            {/* Action Buttons - Compact */}
+                            {/* Action Buttons - Updated with new buttons and names */}
                             <div className="flex gap-2 mb-3 flex-wrap">
                                 <input
                                     type="file"
@@ -715,22 +835,42 @@
                                     Upload Invoice
                                 </button>
                                 
+                                {/* New ALL buttons - REPLACE line */}
                                 <button
-                                    onClick={() => duplicateRow('aluminum')}
+                                    onClick={() => duplicateRow('aluminum', 'all')}
+                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                >
+                                    <Copy className="w-4 h-4" />
+                                    All Aluminum
+                                </button>
+
+                                <button
+                                    onClick={() => duplicateRow('steel', 'all')}
+                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                >
+                                    <Copy className="w-4 h-4" />
+                                    All Steel
+                                </button>
+
+                                {/* Renamed Content buttons - DUPLICATE line */}
+                                <button
+                                    onClick={() => duplicateRow('aluminum', 'content')}
                                     disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
                                     className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
                                     <Copy className="w-4 h-4" />
-                                    Aluminum
+                                    Aluminum Content
                                 </button>
 
                                 <button
-                                    onClick={() => duplicateRow('steel')}
+                                    onClick={() => duplicateRow('steel', 'content')}
                                     disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
                                     className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
                                     <Copy className="w-4 h-4" />
-                                    Steel
+                                    Steel Content
                                 </button>
 
                                 <button
@@ -877,5 +1017,3 @@
     </script>
 </body>
 </html>
-
-

@@ -75,7 +75,7 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard' // Tariff, Aluminum, Steel
+                contentKeyword: 'EXCL' // For Content buttons, look for "EXCL" in values
             },
             vieler: {
                 name: 'Vieler',
@@ -85,7 +85,7 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard'
+                contentKeyword: 'EXCL'
             },
             cb: {
                 name: 'CB Manufacturing',
@@ -95,7 +95,7 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard'
+                contentKeyword: 'EXCL'
             },
             manki: {
                 name: 'Manki',
@@ -105,7 +105,7 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2','TARIFF NUM_3','TARIFF NUM_4', 'TARIFF NUM_5'],
                 tariffFilter: (tariff) => tariff.startsWith('3'),
                 partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'manki' // Tariff, "ALUM", AlumValue, "STEEL", SteelValue
+                contentKeyword: null // No keyword required - all mappings are content
             },
             eisenmann: {
                 name: 'Eisenmann',
@@ -115,7 +115,7 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                mappingFormat: 'standard'
+                contentKeyword: 'EXCL'
             }
         };
 
@@ -262,21 +262,6 @@
                 reader.readAsArrayBuffer(file);
             };
 
-            // Helper function to get the value from mapping based on customer format
-            const getMappingValue = (mapping, materialType, config) => {
-                if (config.mappingFormat === 'manki') {
-                    // Manki format: Tariff, "ALUM", AlumValue, "STEEL", SteelValue
-                    // Column 2 = Aluminum, Column 4 = Steel
-                    const columnIndex = materialType === 'aluminum' ? 2 : 4;
-                    return mapping[columnIndex];
-                } else {
-                    // Standard format: Tariff, Aluminum, Steel
-                    // Column 1 = Aluminum, Column 2 = Steel
-                    const columnIndex = materialType === 'aluminum' ? 1 : 2;
-                    return mapping[columnIndex];
-                }
-            };
-
             // Function for Content buttons (Aluminum Content / Steel Content)
             const findTariffValueContent = (partNumber, materialType) => {
                 const normalizedPartNumber = String(partNumber || '').trim();
@@ -321,29 +306,30 @@
                     };
                 }
 
-                // Look for mapping that contains "EXCL" or "ALUM"/"STEEL" in the appropriate column
+                // Look for mapping based on customer's content keyword
                 const mapping = tariffMappings.find(row => {
                     const tariffCol = String(row[0] || '').trim();
                     
-                    if (config.mappingFormat === 'manki') {
-                        // For Manki: check if tariff matches and contains "ALUM" or "STEEL" markers
-                        const alumMarker = String(row[1] || '').trim();
-                        const steelMarker = String(row[3] || '').trim();
-                        return tariffCol === tariffNumber && 
-                               (alumMarker.includes('ALUM') || steelMarker.includes('STEEL'));
-                    } else {
-                        // For standard format: check if contains "EXCL"
-                        const aluminumCol = String(row[1] || '').trim();
-                        const steelCol = String(row[2] || '').trim();
-                        return tariffCol === tariffNumber && 
-                               (aluminumCol.includes('EXCL') || steelCol.includes('EXCL'));
+                    if (!tariffCol || tariffCol !== tariffNumber) {
+                        return false;
                     }
+                    
+                    // If no content keyword required (like Manki), just match the tariff
+                    if (config.contentKeyword === null) {
+                        return true;
+                    }
+                    
+                    // Otherwise, check for the content keyword (like "EXCL")
+                    const aluminumCol = String(row[1] || '').trim();
+                    const steelCol = String(row[2] || '').trim();
+                    return aluminumCol.includes(config.contentKeyword) || steelCol.includes(config.contentKeyword);
                 });
 
-                const value = mapping ? getMappingValue(mapping, materialType, config) : null;
+                // Column 1 = Aluminum, Column 2 = Steel
+                const columnIndex = materialType === 'aluminum' ? 1 : 2;
                 
-                if (mapping && value) {
-                    return { found: true, value: value, tariff: tariffNumber, materialType };
+                if (mapping && mapping[columnIndex]) {
+                    return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
                 }
 
                 // Default if no mapping found
@@ -395,26 +381,22 @@
                     };
                 }
 
-                // Look for mapping that contains "ALL" or just the tariff value
+                // Look for mapping that contains "ALL"
                 const mapping = tariffMappings.find(row => {
                     const tariffCol = String(row[0] || '').trim();
+                    const aluminumCol = String(row[1] || '').trim();
+                    const steelCol = String(row[2] || '').trim();
                     
-                    if (config.mappingFormat === 'manki') {
-                        // For Manki: just match the tariff
-                        return tariffCol === baseTariff;
-                    } else {
-                        // For standard format: check if contains "ALL"
-                        const aluminumCol = String(row[1] || '').trim();
-                        const steelCol = String(row[2] || '').trim();
-                        return tariffCol === baseTariff && 
-                               (aluminumCol.includes('ALL') || steelCol.includes('ALL'));
-                    }
+                    // Match tariff AND check that this is an ALL row (not EXCL row)
+                    return tariffCol === baseTariff && 
+                           (aluminumCol.includes('ALL') || steelCol.includes('ALL'));
                 });
 
-                const value = mapping ? getMappingValue(mapping, materialType, config) : null;
+                // Column 1 = Aluminum, Column 2 = Steel
+                const columnIndex = materialType === 'aluminum' ? 1 : 2;
                 
-                if (mapping && value) {
-                    return { found: true, value: value, tariff: baseTariff, materialType };
+                if (mapping && mapping[columnIndex]) {
+                    return { found: true, value: mapping[columnIndex], tariff: baseTariff, materialType };
                 }
 
                 // Default if no mapping found

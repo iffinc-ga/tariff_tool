@@ -494,23 +494,21 @@
                 if (hasCustomValues) {
                     updatedOriginalRow = { ...rowToModify };
                     
-                    // Calculate remaining values for original row
-                    const remainingQuantity = (rowToModify.Quantity || 0) - newRowQuantity;
+                    // Keep original quantity unchanged, only adjust ItemTotal
                     const remainingItemTotal = (rowToModify.ItemTotal || 0) - newRowItemTotal;
                     
-                    updatedOriginalRow.Quantity = remainingQuantity;
+                    // Quantity stays the same
+                    updatedOriginalRow.Quantity = rowToModify.Quantity;
                     updatedOriginalRow.ItemTotal = remainingItemTotal;
                     
-                    // Recalculate unit price for original row based on remaining values
-                    if (remainingQuantity > 0) {
-                        updatedOriginalRow.UnitPrice = remainingItemTotal / remainingQuantity;
+                    // Recalculate unit price for original row based on remaining total and ORIGINAL quantity
+                    if (updatedOriginalRow.Quantity > 0) {
+                        updatedOriginalRow.UnitPrice = remainingItemTotal / updatedOriginalRow.Quantity;
                     } else {
                         updatedOriginalRow.UnitPrice = 0;
                     }
                     
-                    // Store subtracted values for restoration on delete
-                    newRow._subtractedQuantity = newRowQuantity;
-                    newRow._subtractedUnitPrice = newRowUnitPrice;
+                    // Store subtracted values for restoration on delete (don't store quantity since it's not subtracted)
                     newRow._subtractedItemTotal = newRowItemTotal;
                 }
 
@@ -532,7 +530,7 @@
                 setDuplicateCount(duplicateCount + 1);
                 
                 if (hasCustomValues) {
-                    messageText += ` Original row updated: Qty=${updatedOriginalRow.Quantity.toFixed(2)}, Price=${updatedOriginalRow.UnitPrice.toFixed(2)}, Total=${updatedOriginalRow.ItemTotal.toFixed(2)}`;
+                    messageText += ` | Original row updated: Total=${updatedOriginalRow.ItemTotal.toFixed(2)}, Price=${updatedOriginalRow.UnitPrice.toFixed(2)} (Qty unchanged: ${updatedOriginalRow.Quantity})`;
                 }
                 
                 setMessage({ type: 'success', text: `Row duplicated for ${messageText}` });
@@ -554,8 +552,6 @@
                     delete newRow._duplicateGroupId;
                     delete newRow._isDuplicate;
                     delete newRow._subtractedItemTotal;
-                    delete newRow._subtractedQuantity;
-                    delete newRow._subtractedUnitPrice;
                     
                     const dateColumns = ['InvoiceDate', 'PO_Date', 'DateOfExport'];
                     dateColumns.forEach(col => {
@@ -613,7 +609,7 @@
                 const newData = [...invoiceData];
                 
                 // Restore original row values if this duplicate had custom values
-                if (rowToDelete._subtractedQuantity !== undefined) {
+                if (rowToDelete._subtractedItemTotal !== undefined) {
                     // Find the original row by searching backwards for the first non-duplicate
                     let originalRowIndex = -1;
                     for (let i = index - 1; i >= 0; i--) {
@@ -626,16 +622,14 @@
                     if (originalRowIndex !== -1) {
                         newData[originalRowIndex] = { ...newData[originalRowIndex] };
                         
-                        // Restore the values
-                        const restoredQuantity = (newData[originalRowIndex].Quantity || 0) + rowToDelete._subtractedQuantity;
+                        // Restore the ItemTotal (quantity stays unchanged)
                         const restoredItemTotal = (newData[originalRowIndex].ItemTotal || 0) + rowToDelete._subtractedItemTotal;
                         
-                        newData[originalRowIndex].Quantity = restoredQuantity;
                         newData[originalRowIndex].ItemTotal = restoredItemTotal;
                         
-                        // Recalculate unit price
-                        if (restoredQuantity > 0) {
-                            newData[originalRowIndex].UnitPrice = restoredItemTotal / restoredQuantity;
+                        // Recalculate unit price based on original quantity
+                        if (newData[originalRowIndex].Quantity > 0) {
+                            newData[originalRowIndex].UnitPrice = restoredItemTotal / newData[originalRowIndex].Quantity;
                         }
                     }
                 }
